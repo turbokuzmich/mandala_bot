@@ -15,40 +15,50 @@ const symbolWidth = 70;
 const symbolHeight = 50;
 const padding = 100;
 
-export default async function draw(lines) {
-  const width = lines[0].length * symbolWidth + padding * 2;
-  const height = (lines.length + 1) * symbolHeight + padding * 2;
+async function initialize() {
   const compile = template(await readFile("./template.html"));
   const browser = await puppeteer.launch();
 
-  try {
-    const page = await browser.newPage();
-    const html = compile({
-      lines,
-      font: resolve(process.cwd(), "roboto.ttf"),
-      letters: lines[0].map(property("letter")),
-    });
+  return async function draw(lines) {
+    const width = lines[0].length * symbolWidth + padding * 2;
+    const height = (lines.length + 1) * symbolHeight + padding * 2;
 
-    const buffer = await withFile(
-      async function ({ path }) {
-        await writeFile(path, html);
-        await page.goto(fileUrl(path));
-        await page.setViewport({ width, height, deviceScaleFactor: 2 });
+    let page = null;
 
-        return await page.screenshot({
-          clip: {
-            x: 0,
-            y: 0,
-            width,
-            height,
-          },
-        });
-      },
-      { name: "index.html" }
-    );
+    try {
+      page = await browser.newPage();
 
-    return move(buffer);
-  } finally {
-    await browser.close();
-  }
+      const html = compile({
+        lines,
+        font: resolve(process.cwd(), "roboto.ttf"),
+        letters: lines[0].map(property("letter")),
+      });
+
+      const buffer = await withFile(
+        async function ({ path }) {
+          await writeFile(path, html);
+          await page.goto(fileUrl(path));
+          await page.setViewport({ width, height, deviceScaleFactor: 2 });
+
+          return await page.screenshot({
+            clip: {
+              x: 0,
+              y: 0,
+              width,
+              height,
+            },
+          });
+        },
+        { name: "index.html" }
+      );
+
+      return move(buffer);
+    } finally {
+      if (page) {
+        await page.close();
+      }
+    }
+  };
 }
+
+export default initialize();

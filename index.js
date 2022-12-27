@@ -42,6 +42,9 @@ const calculator = new Piscina({
 });
 
 const drawer = new Piscina({
+  minThreads: 1,
+  maxThreads: 1,
+  concurrentTasksPerWorker: 5,
   filename: path.resolve(process.cwd(), "drawer.js"),
 });
 
@@ -89,7 +92,7 @@ async function sendCalculationResult(chat, message, result) {
     data: { letters },
   } = result;
 
-  if (ResultFormat.Messages in formats) {
+  /*if (ResultFormat.Messages in formats) {
     const chunks = formats[ResultFormat.Messages].map((chunk, index) => [
       chunk,
       index === 0,
@@ -101,7 +104,7 @@ async function sendCalculationResult(chat, message, result) {
         ...(shouldReply ? { reply_to_message_id: message } : {}),
       });
     }
-  }
+  }*/
 
   if (ResultFormat.TextFile in formats) {
     await bot.sendDocument(
