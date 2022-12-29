@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "abort-controller": "^3.0.0",
+    "color": "^4.2.3",
     "dotenv": "^16.0.3",
     "lodash": "^4.17.21",
     "node-telegram-bot-api": "^0.60.0",
