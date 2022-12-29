@@ -52,7 +52,12 @@ const bot = new TelegramBot(
 );
 
 async function sendCalculationImage(chat, message, result) {
-  if (!(ResultFormat.Raw in result.formats)) {
+  if (
+    !(
+      ResultFormat.Raw in result.formats &&
+      ResultFormat.Mandala in result.formats
+    )
+  ) {
     return;
   }
 
@@ -63,6 +68,7 @@ async function sendCalculationImage(chat, message, result) {
       drawer.run(
         {
           originalText: result.data.trim.originalText,
+          mandala: result.formats[ResultFormat.Mandala],
           lines: result.formats[ResultFormat.Raw],
         },
         { signal }

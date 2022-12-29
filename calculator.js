@@ -243,11 +243,20 @@ function formatForFile(input) {
     .join("\n");
 }
 
+function formatForMandala(input) {
+  const line = input.result[input.result.length - 8];
+  const reversed = line.reduceRight((result, item) => [...result, item], []);
+  const start = line.concat(reversed);
+
+  return [start, ...new MandalaLines(start)];
+}
+
 function format(input) {
   const { data } = input;
 
   const formats = [
     [ResultFormat.Raw, property("result")],
+    [ResultFormat.Mandala, formatForMandala],
     [ResultFormat.TextFile, formatForFile],
   ]
     .filter(([_, isPossible]) => isPossible)

@@ -6,6 +6,7 @@ export const CalculationStatus = {
 
 export const ResultFormat = {
   Raw: "raw",
+  Mandala: "mandala",
   TextFile: "textfile",
 };
 

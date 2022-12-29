@@ -147,32 +147,6 @@ class BlockRowsGenerator {
   }
 }
 
-class BlockRowSpanGenerator {
-  size = 16;
-
-  constructor(size = 16) {
-    this.size = size;
-  }
-
-  [Symbol.iterator]() {
-    let index = 1;
-
-    return {
-      next: () => {
-        if (index === this.size) {
-          return { done: true };
-        }
-
-        const value = index / this.size;
-
-        index++;
-
-        return { done: false, value };
-      },
-    };
-  }
-}
-
 function calculateCanvasSize(context, originalText, lines) {
   const linesWidth = lines[0].length * symbolWidth;
   const linesHeight = (lines.length + 1) * symbolHeight;
@@ -321,6 +295,8 @@ function drawCalculations(context, lines, titleHeight, mandalaHeight) {
 }
 
 function drawMandala(context, lines, titleHeight) {
+  const indices = lines.reduceRight((result, line) => [...result, line], []);
+
   const angle = degreesToRadians(60);
   const widthProjection = Math.cos(degreesToRadians(30));
   const heightProjection = Math.sin(degreesToRadians(30));
@@ -329,7 +305,6 @@ function drawMandala(context, lines, titleHeight) {
   const blockProjectionHeight = mandalaBlockSize * heightProjection;
   const mandalaBlocksCount = 16;
   const blockRows = [...new BlockRowsGenerator(mandalaBlocksCount)];
-  const blockSpans = [...new BlockRowSpanGenerator(mandalaBlocksCount)];
 
   const colors = [
     ...new ColorGenerator(
@@ -364,26 +339,8 @@ function drawMandala(context, lines, titleHeight) {
         const x4 = x1;
         const y4 = y1 + mandalaBlockSize;
 
-        const proportion =
-          Math.sqrt(x1 * x1 + y1 * y1) /
-          ((Math.sin(angle) * (mandalaBlocksCount * mandalaBlockSize)) /
-            Math.sin(degreesToRadians(120) - Math.atan2(x1, y1)));
-
-        const { index } = blockSpans.reduce(
-          (result, span, index) => {
-            const delta = Math.abs(proportion - span);
-
-            if (delta < result.delta) {
-              result.delta = delta;
-              result.index = index;
-            }
-
-            return result;
-          },
-          { delta: Infinity, index: 0 }
-        );
-
-        context.fillStyle = colors[index].hex();
+        context.fillStyle =
+          colors[indices[blockIndex + row][blockIndex].index - 1].hex();
 
         context.beginPath();
         context.moveTo(x1, y1);
@@ -404,7 +361,7 @@ function drawMandala(context, lines, titleHeight) {
 async function initialize() {
   FontLibrary.use("Roboto", resolve(process.cwd(), "roboto.ttf"));
 
-  return async function ({ originalText, lines }) {
+  return async function ({ originalText, mandala, lines }) {
     const canvas = new Canvas();
     const context = canvas.getContext("2d");
 
@@ -426,7 +383,7 @@ async function initialize() {
     context.font = font;
 
     drawTitle(context, originalText);
-    drawMandala(context, lines, titleHeight);
+    drawMandala(context, mandala, titleHeight);
     drawCalculations(context, lines, titleHeight, mandalaHeight);
 
     if (isMainThread) {
