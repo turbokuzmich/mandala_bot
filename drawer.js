@@ -1,35 +1,116 @@
+import { isMainThread } from "worker_threads";
+import { readFile } from "fs/promises";
 import { resolve } from "path";
 import { move } from "piscina";
 import { Canvas, FontLibrary } from "skia-canvas";
 
-const symbolWidth = 70;
-const symbolHeight = 50;
-const padding = 100;
+import {
+  font,
+  symbolWidth,
+  symbolHeight,
+  padding,
+  titlePadding,
+  resultTitle,
+} from "./constants.js";
 
-async function initialize() {
-  FontLibrary.use("Roboto", resolve(process.cwd(), "roboto.ttf"));
+function calculateCanvasSize(context, originalText, lines) {
+  const linesWidth = lines[0].length * symbolWidth;
+  const linesHeight = (lines.length + 1) * symbolHeight;
+  const {
+    lines: [titleMeasure],
+  } = context.measureText(resultTitle, Infinity);
+  const {
+    lines: [textMeasure],
+  } = context.measureText(`«${originalText}»`, Infinity);
 
-  return async function (lines) {
-    const width = lines[0].length * symbolWidth + padding * 2;
-    const height = (lines.length + 1) * symbolHeight + padding * 2;
+  const titleHeight = Math.ceil(titleMeasure.height + textMeasure.height);
 
-    const canvas = new Canvas(width, height);
-    const context = canvas.getContext("2d");
+  const contentWidth =
+    Math.ceil(Math.max(titleMeasure.width, textMeasure.width, linesWidth)) +
+    padding * 2;
+  const contentHeight = titleHeight + titlePadding + linesHeight + padding * 2;
 
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, width, height);
+  return [contentWidth, contentHeight, titleHeight];
+}
 
-    context.font = "36px Roboto";
-    context.fillStyle = "#000";
+function drawTitle(context, originalText) {
+  const { canvas } = context;
+  const text = `«${originalText}»`;
+
+  const {
+    lines: [titleMeasure],
+  } = context.measureText(resultTitle, Infinity);
+  const {
+    lines: [textMeasure],
+  } = context.measureText(text, Infinity);
+
+  context.save();
+  context.translate(
+    padding + (canvas.width - padding * 2 - titleMeasure.width) / 2,
+    padding
+  );
+  context.fillText(resultTitle, 0, -titleMeasure.y);
+  context.restore();
+
+  context.save();
+  context.translate(
+    padding + (canvas.width - padding * 2 - textMeasure.width) / 2,
+    padding + titleMeasure.height
+  );
+  context.fillText(text, 0, -titleMeasure.y);
+  context.restore();
+}
+
+function drawCalculations(context, lines, titleHeight) {
+  const linesContentLeftOffset =
+    padding +
+    (context.canvas.width - padding * 2 - lines[0].length * symbolWidth) / 2;
+
+  context.save();
+  context.translate(
+    linesContentLeftOffset,
+    padding + titleHeight + titlePadding
+  );
+
+  lines[0].forEach(({ letter }, index) => {
+    const symbol = letter ? letter : "—";
 
     context.save();
-    context.translate(padding, padding);
+    context.translate(symbolWidth * index, 0);
 
-    lines[0].forEach(({ letter }, index) => {
-      const symbol = letter ? letter : "—";
+    const {
+      lines: [{ y, width, height }],
+    } = context.measureText(symbol);
 
+    context.fillText(
+      symbol,
+      (symbolWidth - width) / 2,
+      -y + (symbolHeight - height) / 2
+    );
+
+    context.restore();
+  });
+
+  context.restore();
+  context.translate(
+    linesContentLeftOffset,
+    padding + titleHeight + titlePadding + symbolHeight
+  );
+  context.save();
+
+  lines.forEach((line, lineIndex) => {
+    const lineTopPadding = symbolHeight * lineIndex;
+    const lineLeftPadding =
+      (context.canvas.width -
+        (linesContentLeftOffset * 2 + symbolWidth * line.length)) /
+      2;
+
+    context.save();
+    context.translate(lineLeftPadding, lineTopPadding);
+
+    line.forEach(({ index: symbol }, symbolIndex) => {
       context.save();
-      context.translate(symbolWidth * index, 0);
+      context.translate(symbolWidth * symbolIndex, 0);
 
       const {
         lines: [{ y, width, height }],
@@ -45,39 +126,50 @@ async function initialize() {
     });
 
     context.restore();
-    context.translate(padding, padding + symbolHeight);
-    context.save();
+  });
+}
 
-    lines.forEach((line, lineIndex) => {
-      const lineTopPadding = symbolHeight * lineIndex;
-      const lineLeftPadding =
-        (width - (padding * 2 + symbolWidth * line.length)) / 2;
+async function initialize() {
+  FontLibrary.use("Roboto", resolve(process.cwd(), "roboto.ttf"));
 
-      context.save();
-      context.translate(lineLeftPadding, lineTopPadding);
+  return async function ({ originalText, lines }) {
+    const canvas = new Canvas();
+    const context = canvas.getContext("2d");
 
-      line.forEach(({ index: symbol }, symbolIndex) => {
-        context.save();
-        context.translate(symbolWidth * symbolIndex, 0);
+    context.font = font;
 
-        const {
-          lines: [{ y, width, height }],
-        } = context.measureText(symbol);
+    const [width, height, titleHeight] = calculateCanvasSize(
+      context,
+      originalText,
+      lines
+    );
 
-        context.fillText(
-          symbol,
-          (symbolWidth - width) / 2,
-          -y + (symbolHeight - height) / 2
-        );
+    canvas.width = width;
+    canvas.height = height;
 
-        context.restore();
-      });
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#000";
 
-      context.restore();
-    });
+    context.font = font;
 
-    return move(await canvas.toBuffer("png"));
+    drawTitle(context, originalText);
+    drawCalculations(context, lines, titleHeight);
+
+    if (isMainThread) {
+      await canvas.saveAs("./out.png");
+    } else {
+      return move(await canvas.toBuffer("png", { density: 2 }));
+    }
   };
+}
+
+async function main() {
+  const work = await initialize();
+  const raw = await readFile("./data.json", "utf-8");
+  const data = JSON.parse(raw);
+
+  await work(data);
 }
 
 export default initialize();

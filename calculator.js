@@ -1,12 +1,12 @@
+import property from "lodash/property.js";
+
 import {
   base,
+  resultTitle,
   lettersIndexMap,
-  maxTextSizeForMessage,
-  maxTelegramMessageSize,
   minimumCalculatableSize,
   ResultFormat,
   CalculationStatus,
-  messageWrapperSize,
 } from "./constants.js";
 
 function getSum(indexA, indexB, ceil = base) {
@@ -231,55 +231,28 @@ function getFormattedLines(input) {
   return [header, ...lines];
 }
 
-function formatForMessages(input) {
-  const { chunks, chunk } = getFormattedLines(input).reduce(
-    (result, line) => {
-      const { size, chunk, chunks } = result;
-
-      if (size + line.length + messageWrapperSize > maxTextSizeForMessage) {
-        return {
-          chunk: [line],
-          size: line.length,
-          chunks: [...chunks, chunk],
-        };
-      } else {
-        return {
-          chunks,
-          chunk: [...chunk, line],
-          size: size + line.length,
-        };
-      }
-    },
-    {
-      chunks: [],
-      chunk: [],
-      size: 0,
-    }
-  );
-
-  return [...chunks, chunk].map((chunk) => `<code>${chunk.join("\n")}</code>`);
-}
-
 function formatForFile(input) {
-  return getFormattedLines(input).join("\n");
+  const {
+    data: {
+      trim: { originalText },
+    },
+  } = input;
+
+  return [resultTitle, `«${originalText}»`, ""]
+    .concat(getFormattedLines(input))
+    .join("\n");
 }
 
 function format(input) {
   const { data } = input;
-  const { letters } = data;
 
   const formats = [
-    [ResultFormat.Raw, true, ({ result }) => result],
-    [
-      ResultFormat.Messages,
-      letters.length <= maxTextSizeForMessage,
-      formatForMessages,
-    ],
-    [ResultFormat.TextFile, true, formatForFile],
+    [ResultFormat.Raw, property("result")],
+    [ResultFormat.TextFile, formatForFile],
   ]
     .filter(([_, isPossible]) => isPossible)
     .reduce(
-      (formats, [format, _, formatter]) => ({
+      (formats, [format, formatter]) => ({
         ...formats,
         [format]: formatter(input),
       }),

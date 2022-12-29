@@ -1,3 +1,4 @@
+import { writeFile } from "fs/promises";
 import { config } from "dotenv";
 import path from "path";
 import TelegramBot from "node-telegram-bot-api";
@@ -59,7 +60,13 @@ async function sendCalculationImage(chat, message, result) {
 
   try {
     const buffer = await timeout(
-      drawer.run(result.formats[ResultFormat.Raw], { signal }),
+      drawer.run(
+        {
+          originalText: result.data.trim.originalText,
+          lines: result.formats[ResultFormat.Raw],
+        },
+        { signal }
+      ),
       {
         signal,
         milliseconds: calculationTimeout,
@@ -88,20 +95,6 @@ async function sendCalculationResult(chat, message, result) {
     formats,
     data: { letters },
   } = result;
-
-  /*if (ResultFormat.Messages in formats) {
-    const chunks = formats[ResultFormat.Messages].map((chunk, index) => [
-      chunk,
-      index === 0,
-    ]);
-
-    for await (const [chunk, shouldReply] of chunks) {
-      await bot.sendMessage(chat, chunk, {
-        parse_mode: "HTML",
-        ...(shouldReply ? { reply_to_message_id: message } : {}),
-      });
-    }
-  }*/
 
   if (ResultFormat.TextFile in formats) {
     await bot.sendDocument(

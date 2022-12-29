@@ -7,17 +7,17 @@ export const CalculationStatus = {
 export const ResultFormat = {
   Raw: "raw",
   TextFile: "textfile",
-  Messages: "messages",
 };
 
+export const resultTitle = "РАСЧЕТ МАНДАЛЫ";
+export const font = "36px Roboto";
+export const symbolWidth = 70;
+export const symbolHeight = 50;
+export const padding = 100;
+export const titlePadding = 70;
 export const calculationTimeout = 10000;
 export const minimumCalculatableSize = 8;
 export const base = 9;
-export const maxTelegramMessageSize = 4096;
-export const messageWrapperSize = "</code>".length * 2;
-export const maxTextSizeForMessage = Math.floor(
-  (maxTelegramMessageSize - messageWrapperSize) / 2
-);
 
 const russianLetters = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
 const englishLetters = "abcdefghijklmnopqrstuvwxyz";
