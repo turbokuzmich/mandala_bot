@@ -42,15 +42,12 @@ const calculator = new Piscina({
 });
 
 const drawer = new Piscina({
-  minThreads: 1,
-  maxThreads: 1,
-  concurrentTasksPerWorker: 5,
   filename: path.resolve(process.cwd(), "drawer.js"),
 });
 
 const bot = new TelegramBot(
   process.env.TELEGRAM_API_TOKEN,
-  isProduction ? { webHook: true } : { polling: true }
+  isProduction ? { webHook: { port: 8443 } } : { polling: true }
 );
 
 async function sendCalculationImage(chat, message, result) {
@@ -73,7 +70,7 @@ async function sendCalculationImage(chat, message, result) {
       chat,
       Buffer.from(buffer),
       {
-        caption: "На картиночке",
+        caption: "Расчет на картинке",
         reply_to_message_id: message,
       },
       {
@@ -111,7 +108,7 @@ async function sendCalculationResult(chat, message, result) {
       chat,
       Buffer.from(formats[ResultFormat.TextFile]),
       {
-        caption: "Сохраните текстовую версию на всякий случай",
+        caption: "Расчет в текстовом виде",
         reply_to_message_id: message,
       },
       { filename: `${letters.join("")}.txt`, contentType: "text/plain" }

@@ -1,63 +1,82 @@
-import fs from "fs";
-import property from "lodash/property.js";
-import fileUrl from "file-url";
-import { move } from "piscina";
 import { resolve } from "path";
-import { promisify } from "util";
-import { withFile } from "tmp-promise";
-import puppeteer from "puppeteer";
-import template from "lodash/template.js";
-
-const readFile = promisify(fs.readFile);
-const writeFile = promisify(fs.writeFile);
+import { move } from "piscina";
+import { Canvas, FontLibrary } from "skia-canvas";
 
 const symbolWidth = 70;
 const symbolHeight = 50;
 const padding = 100;
 
 async function initialize() {
-  const compile = template(await readFile("./template.html"));
-  const browser = await puppeteer.launch();
+  FontLibrary.use("Roboto", resolve(process.cwd(), "roboto.ttf"));
 
-  return async function draw(lines) {
+  return async function (lines) {
     const width = lines[0].length * symbolWidth + padding * 2;
     const height = (lines.length + 1) * symbolHeight + padding * 2;
 
-    let page = null;
+    const canvas = new Canvas(width, height);
+    const context = canvas.getContext("2d");
 
-    try {
-      page = await browser.newPage();
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, width, height);
 
-      const html = compile({
-        lines,
-        font: resolve(process.cwd(), "roboto.ttf"),
-        letters: lines[0].map(property("letter")),
-      });
+    context.font = "36px Roboto";
+    context.fillStyle = "#000";
 
-      const buffer = await withFile(
-        async function ({ path }) {
-          await writeFile(path, html);
-          await page.goto(fileUrl(path));
-          await page.setViewport({ width, height, deviceScaleFactor: 2 });
+    context.save();
+    context.translate(padding, padding);
 
-          return await page.screenshot({
-            clip: {
-              x: 0,
-              y: 0,
-              width,
-              height,
-            },
-          });
-        },
-        { name: "index.html" }
+    lines[0].forEach(({ letter }, index) => {
+      const symbol = letter ? letter : "—";
+
+      context.save();
+      context.translate(symbolWidth * index, 0);
+
+      const {
+        lines: [{ y, width, height }],
+      } = context.measureText(symbol);
+
+      context.fillText(
+        symbol,
+        (symbolWidth - width) / 2,
+        -y + (symbolHeight - height) / 2
       );
 
-      return move(buffer);
-    } finally {
-      if (page) {
-        await page.close();
-      }
-    }
+      context.restore();
+    });
+
+    context.restore();
+    context.translate(padding, padding + symbolHeight);
+    context.save();
+
+    lines.forEach((line, lineIndex) => {
+      const lineTopPadding = symbolHeight * lineIndex;
+      const lineLeftPadding =
+        (width - (padding * 2 + symbolWidth * line.length)) / 2;
+
+      context.save();
+      context.translate(lineLeftPadding, lineTopPadding);
+
+      line.forEach(({ index: symbol }, symbolIndex) => {
+        context.save();
+        context.translate(symbolWidth * symbolIndex, 0);
+
+        const {
+          lines: [{ y, width, height }],
+        } = context.measureText(symbol);
+
+        context.fillText(
+          symbol,
+          (symbolWidth - width) / 2,
+          -y + (symbolHeight - height) / 2
+        );
+
+        context.restore();
+      });
+
+      context.restore();
+    });
+
+    return move(await canvas.toBuffer("png"));
   };
 }
 

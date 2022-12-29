@@ -12,17 +12,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@svgdotjs/svg.js": "^3.1.2",
     "abort-controller": "^3.0.0",
     "dotenv": "^16.0.3",
-    "file-url": "^4.0.0",
     "lodash": "^4.17.21",
     "node-telegram-bot-api": "^0.60.0",
     "p-timeout": "^6.0.0",
     "piscina": "^3.2.0",
-    "puppeteer": "^19.4.1",
-    "svgdom": "^0.1.11",
-    "tmp-promise": "^3.0.3"
+    "skia-canvas": "^1.0.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.20"
