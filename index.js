@@ -47,7 +47,7 @@ const drawer = new Piscina({
 
 const bot = new TelegramBot(
   process.env.TELEGRAM_API_TOKEN,
-  isProduction ? { webHook: { port: 8443 } } : { polling: true }
+  isProduction ? { webHook: { port: 8444 } } : { polling: true }
 );
 
 async function sendCalculationImage(chat, message, result) {
