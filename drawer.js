@@ -219,7 +219,7 @@ function drawTitle(context, originalText) {
   context.restore();
 }
 
-function drawCalculations(context, lines, titleHeight, mandalaHeight) {
+function drawCalculations(context, lines, colors, titleHeight, mandalaHeight) {
   const linesContentLeftOffset =
     padding +
     (context.canvas.width - padding * 2 - lines[0].length * symbolWidth) / 2;
@@ -279,6 +279,10 @@ function drawCalculations(context, lines, titleHeight, mandalaHeight) {
         lines: [{ y, width, height }],
       } = context.measureText(symbol);
 
+      context.fillStyle = colors[symbol].alpha(0.3).rgb();
+      context.fillRect(0, 0, symbolWidth, symbolHeight);
+      context.fillStyle = "#000";
+
       context.fillText(
         symbol,
         (symbolWidth - width) / 2,
@@ -294,7 +298,7 @@ function drawCalculations(context, lines, titleHeight, mandalaHeight) {
   context.restore();
 }
 
-function drawMandala(context, lines, titleHeight) {
+function drawMandala(context, lines, colors, titleHeight) {
   const indices = lines.reduceRight((result, line) => [...result, line], []);
 
   const angle = degreesToRadians(60);
@@ -303,15 +307,7 @@ function drawMandala(context, lines, titleHeight) {
 
   const blockProjectionWidth = mandalaBlockSize * widthProjection;
   const blockProjectionHeight = mandalaBlockSize * heightProjection;
-  const mandalaBlocksCount = 16;
   const blockRows = [...new BlockRowsGenerator(mandalaBlocksCount)];
-
-  const colors = [
-    ...new ColorGenerator(
-      mandalaBlocksCount,
-      20 + Math.round(Math.random() * 40)
-    ),
-  ];
 
   context.save();
 
@@ -365,6 +361,13 @@ async function initialize() {
     const canvas = new Canvas();
     const context = canvas.getContext("2d");
 
+    const colors = [
+      ...new ColorGenerator(
+        mandalaBlocksCount,
+        20 + Math.round(Math.random() * 40)
+      ),
+    ];
+
     context.font = font;
 
     const [width, height, titleHeight, mandalaHeight] = calculateCanvasSize(
@@ -376,15 +379,20 @@ async function initialize() {
     canvas.width = width;
     canvas.height = height;
 
-    context.fillStyle = "#fff";
+    const gradient = context.createLinearGradient(0, 0, 0, height);
+
+    gradient.addColorStop(0, "#fefefe");
+    gradient.addColorStop(1, "#ddd");
+
+    context.fillStyle = gradient;
     context.fillRect(0, 0, width, height);
     context.fillStyle = "#000";
 
     context.font = font;
 
     drawTitle(context, originalText);
-    drawMandala(context, mandala, titleHeight);
-    drawCalculations(context, lines, titleHeight, mandalaHeight);
+    drawMandala(context, mandala, colors, titleHeight);
+    drawCalculations(context, lines, colors, titleHeight, mandalaHeight);
 
     if (isMainThread) {
       await canvas.saveAs("./out.png");

@@ -19,7 +19,7 @@ export const titlePadding = 70;
 export const calculationTimeout = 10000;
 export const minimumCalculatableSize = 8;
 export const base = 9;
-export const mandalaBlockSize = 20;
+export const mandalaBlockSize = 30;
 export const mandalaBlocksCount = 16;
 export const mandalaPadding = 70;
 
