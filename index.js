@@ -15,8 +15,16 @@ config();
 
 const isProduction = process.env.NODE_ENV === "production";
 
+const serviceCommandsList = ["start", "help", "settings"];
+
 const commands = {
   mandala: { description: "Рассчитать мандалу" },
+  start: { description: "Приветственное слово от Димастого" },
+  help: {
+    description:
+      "Всякие ништяки от Димастого. Например, расчет мандалы /mandala",
+  },
+  settings: { description: "Пока я не придумал тут никаких настроек" },
 };
 
 const botCommands = Object.entries(commands).map(
@@ -202,6 +210,43 @@ bot.onText(commandRegExps.mandala, async function (message) {
   });
 });
 
+bot.onText(commandRegExps.start, async function (message) {
+  const {
+    from: { first_name, last_name },
+    chat: { id },
+  } = message;
+
+  await bot.sendMessage(
+    id,
+    `Добро пожаловать, ${[first_name, last_name]
+      .filter(Boolean)
+      .join(
+        " "
+      )}.\n\nПока этот бот ничего толком не умееет, кроме как рассчитывать мандалы. Если хочешь, можешь попробовать команду /mandala.`
+  );
+});
+
+bot.onText(commandRegExps.help, async function (message) {
+  const {
+    message_id,
+    chat: { id },
+  } = message;
+
+  const commandsNames = Object.keys(commands).filter(
+    (command) => !serviceCommandsList.includes(command)
+  );
+
+  const answerLines = ["Список доступных команд:"].concat(
+    commandsNames.map(
+      (command) => `/${command}: ${commands[command].description}`
+    )
+  );
+
+  await bot.sendMessage(id, answerLines.join("\n"), {
+    reply_to_message_id: message_id,
+  });
+});
+
 bot.on("message", async function (message) {
   const {
     message_id,
@@ -215,6 +260,10 @@ bot.on("message", async function (message) {
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
     await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
       reply_to_message_id: message_id,
+      reply_markup: {
+        keyboard: [[{ text: "/mandala" }]],
+        one_time_keyboard: true,
+      },
     });
   }
 });
