@@ -11,16 +11,14 @@
       href="https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap"
       rel="stylesheet"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css"
+    />
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap");
 
-      body,
-      html {
-        padding: 0;
-        margin: 0;
-        font-family: "Roboto", sans-serif;
-      }
-      .container {
+      .wrapper {
         display: flex;
         height: 100vh;
         flex-direction: column;
@@ -29,28 +27,12 @@
         flex-shrink: 0;
         flex-grow: 0;
         padding: 10px 20px;
-        text-align: right;
         font-size: 20px;
         line-height: 28px;
       }
       .map {
         height: 100vh;
         overflow: hidden;
-      }
-      .button {
-        color: #ffffff;
-        height: 40px;
-        border: none;
-        outline: none;
-        padding: 0;
-        margin: 0;
-        font-size: 18px;
-        background-color: #acacac;
-        text-transform: uppercase;
-        padding: 0 18px;
-      }
-      .button_action {
-        background-color: #2e7d32;
       }
       .pane-container {
         position: absolute;
@@ -68,18 +50,12 @@
         right: 0;
         bottom: 0;
         background-color: rgba(255, 255, 255, 0.8);
-        padding: 10px 20px;
+        padding: 20px 20px;
         transition: transform 0.2s ease-out;
         transform: translateY(100%);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
       }
       .pane.visible {
         transform: translateY(0);
-      }
-      .point-info {
-        font-size: 18px;
       }
       .buttons {
         display: flex;
@@ -89,20 +65,37 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/7.8.0/rxjs.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/ru.min.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=cd000b7d-9831-4a12-8fcc-4d94421d4585&lang=ru_RU"></script>
   </head>
   <body>
-    <div class="container">
-      <header class="header js-user-info">Пользователь неизвестен</header>
+    <div class="wrapper">
+      <nav class="navbar navbar-light bg-light">
+        <span class="navbar-brand h1 mb-0 js-user-info"
+          >Пользователь неизвестен</span
+        >
+      </nav>
       <div id="map" class="map"></div>
     </div>
     <div class="pane-container">
       <div class="pane js-pane-actions">
-        <div class="point-info js-point-info"></div>
+        <div class="point-info">
+          <h4>Добавление точки</h4>
+          <p>Координаты: <span class="js-point-info"></span></p>
+          <div class="form-group">
+            <label for="pointDescription">Ваш комментарий</label>
+            <textarea
+              class="form-control js-point-description"
+              id="pointDescription"
+              rows="3"
+            ></textarea>
+          </div>
+        </div>
         <div class="buttons">
-          <button class="button js-button-cancel">отмена</button>
-          <button class="button button_action js-button-append">
-            добавить
+          <button class="btn btn-primary js-button-append">Добавить</button>
+          <button class="btn btn-outline-secondary js-button-cancel">
+            Отмена
           </button>
         </div>
       </div>

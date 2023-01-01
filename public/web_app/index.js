@@ -1,8 +1,11 @@
 Telegram.WebApp.ready();
 
+noment.locale("ru");
+
 const userInfo = document.querySelector(".js-user-info");
 const actionsPane = document.querySelector(".js-pane-actions");
 const pointInfo = document.querySelector(".js-point-info");
+const pointDescription = document.querySelector(".js-point-description");
 const appendButton = document.querySelector(".js-button-append");
 const cancelButton = document.querySelector(".js-button-cancel");
 
@@ -86,9 +89,25 @@ const mapClicks$ = map$.pipe(
   rxjs.shareReplay(1)
 );
 
-const balloonCloses = map$.pipe(
+const balloonOpens$ = map$.pipe(
+  rxjs.mergeMap((map) => fromYMapsEvents(map.balloon, "open")),
+  rxjs.share()
+);
+
+const balloonCloses$ = map$.pipe(
   rxjs.mergeMap((map) => fromYMapsEvents(map.balloon, "close")),
-  rxjs.shareReplay(1)
+  rxjs.share()
+);
+
+const balloonClicks$ = map$.pipe(
+  rxjs.mergeMap((map) => fromYMapsEvents(map.balloon, "click")),
+  rxjs.share()
+);
+
+const clusterPointSelected$ = rxjs.merge(balloonOpens$, balloonClicks$).pipe(
+  rxjs.map((event) => event.originalEvent.target.balloon.getData().cluster),
+  rxjs.filter(Boolean),
+  rxjs.map((cluster) => cluster.state.get("activeObject"))
 );
 
 const cancelClicks$ = rxjs.fromEvent(cancelButton, "click");
@@ -97,13 +116,13 @@ const appendClicks$ = rxjs.fromEvent(appendButton, "click");
 const newPointCoords$ = rxjs
   .merge(
     mapClicks$.pipe(rxjs.map((event) => event.get("coords"))),
-    balloonCloses.pipe(rxjs.map(() => null))
+    balloonCloses$.pipe(rxjs.map(() => null))
   )
   .pipe(rxjs.distinctUntilChanged(), rxjs.shareReplay(1));
 
 const cluster$ = rxjs.combineLatest([ymaps$, map$]).pipe(
-  rxjs.map(([ymaps, map]) =>
-    map.geoObjects.getLength() === 0
+  rxjs.map(([ymaps, map]) => {
+    return map.geoObjects.getLength() === 0
       ? {
           isAppended: false,
           cluster: new ymaps.Clusterer({
@@ -113,8 +132,8 @@ const cluster$ = rxjs.combineLatest([ymaps$, map$]).pipe(
             geoObjectHideIconOnBalloonOpen: false,
           }),
         }
-      : { isAppended: true, cluster: map.geoObjects.get(0) }
-  )
+      : { isAppended: true, cluster: map.geoObjects.get(0) };
+  })
 );
 
 const user$ = ymaps$.pipe(
@@ -133,7 +152,6 @@ const user$ = ymaps$.pipe(
 );
 
 const pointAppended$ = user$.pipe(
-  rxjs.take(1),
   rxjs.map(({ username }) =>
     newPointCoords$.pipe(
       rxjs.map((coords) =>
@@ -145,6 +163,7 @@ const pointAppended$ = user$.pipe(
                       user: username,
                       latitude: coords[0],
                       longitude: coords[1],
+                      description: pointDescription.value.trim(),
                     })
                   : rxjs.EMPTY
               ),
@@ -166,6 +185,32 @@ const points$ = rxjs
     rxjs.shareReplay(1)
   );
 
+function renderPointBallonBody(point) {
+  const parts = [];
+
+  parts.push(
+    `<p>Добавил ${point.createdBy} ${moment(point.createdAt).format("H:mm:ss")}`
+  );
+
+  if (point.description) {
+    parts.push(`<p><b>Комментарий</b>:<br />${point.comment}</p>`);
+  }
+
+  if (point.status === "created") {
+    parts.push("<p>Точка еще никем не подтверждена</p>");
+  } else if (point.status === "voted") {
+    parts.push(
+      `<p>Точка последний раз подтверждена ${moment(point.votedAt).format(
+        "H:mm:ss"
+      )}`
+    );
+  } else {
+    parts.push("Точка давно никем не подтверждена");
+  }
+
+  return parts.join("");
+}
+
 const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
   rxjs.map(([points, ymaps]) =>
     points.map(
@@ -173,8 +218,10 @@ const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
         new ymaps.Placemark(
           [point.latitude, point.longitude],
           {
-            balloonContentHeader: "Точка",
-            balloonContentBody: `obanze`,
+            balloonContentHeader: `${point.latitude.toPrecision(
+              6
+            )}, ${point.longitude.toPrecision(6)}`,
+            balloonContentBody: renderPointBallonBody(point),
           },
           {
             preset: "islands#circleIcon",
@@ -193,9 +240,9 @@ user$.subscribe(function ({ isAuthorized, username }) {
 
 newPointCoords$.subscribe(function (coords) {
   if (coords) {
-    pointInfo.innerHTML = `Добавить новую точку по координатам ${coords[0].toPrecision(
-      6
-    )}, ${coords[1].toPrecision(6)}?`;
+    pointInfo.innerHTML = coords
+      .map((coord) => coord.toPrecision(6))
+      .join(", ");
     actionsPane.classList.add("visible");
   } else {
     actionsPane.classList.remove("visible");
@@ -257,79 +304,8 @@ map$
     }
   });
 
-pointAppended$.subscribe();
+pointAppended$.subscribe(function () {
+  pointDescription.value = "";
+});
 
-function init() {
-  function updateSelectedCoords(coords) {
-    selectedPointCoords = coords;
-
-    if (selectedPointCoords && selectedPointCoords.length) {
-      appendButton.disabled = false;
-    } else {
-      appendButton.disabled = true;
-    }
-  }
-
-  async function onPointAppend() {
-    const [latitude, longitude] = selectedPointCoords;
-
-    const {
-      data: { points },
-    } = await api.post("/map/points", {
-      user: "test",
-      latitude,
-      longitude,
-    });
-
-    updateSelectedCoords(null);
-    renderPoints(points);
-  }
-  function renderPoints(points) {
-    const placemarks = points.map((point) => {
-      const placemark = new ymaps.Placemark(
-        [point.latitude, point.longitude],
-        {
-          balloonContentHeader: "Точка",
-          balloonContentBody: `obanze`,
-        },
-        {
-          preset: "islands#circleIcon",
-        }
-      );
-
-      return placemark;
-    });
-
-    if (map.geoObjects.getLength()) {
-      const clusterer = map.geoObjects.get(0);
-
-      clusterer.removeAll();
-      clusterer.add(placemarks);
-    } else {
-      const clusterer = new ymaps.Clusterer({
-        groupByCoordinates: false,
-        clusterDisableClickZoom: true,
-        clusterHideIconOnBalloonOpen: false,
-        geoObjectHideIconOnBalloonOpen: false,
-      });
-
-      clusterer.balloon.events.add(["open", "click"], () => {
-        const { cluster } = clusterer.balloon.getData();
-        const object = cluster.state.get("activeObject");
-        object.events.fire("point:selected");
-      });
-
-      clusterer.add(placemarks);
-      map.geoObjects.add(clusterer);
-    }
-  }
-  map.events.add("click", onMapClick);
-  map.balloon.events.add("close", onBalloonClose);
-
-  appendButton.addEventListener("click", onPointAppend);
-
-  fetchUsername();
-  fetchPoints();
-}
-
-// ymaps.ready(init);
+clusterPointSelected$.subscribe(() => {});

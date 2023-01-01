@@ -215,6 +215,7 @@ apiServer.post(
 
     votes.push({ createdAt: now, createdBy: user });
 
+    point.status = PointStatus.voted;
     point.votes = votes;
     point.votedAt = now;
 
@@ -242,11 +243,11 @@ async function pointHealtchChecker() {
     ids.forEach((id) => {
       const point = points.get(id);
 
-      if (["created", "voted"].includes(point.status)) {
-        point.status = "unvoted-weak";
+      if ([PointStatus.created, PointStatus.voted].includes(point.status)) {
+        point.status = PointStatus.unvotedWeak;
         point.checkedAt = now;
-      } else if (point.status === "unvoted-weak") {
-        point.status = "unvoted-strong";
+      } else if (point.status === PointStatus.unvotedWeak) {
+        point.status = PointStatus.unvotedStrong;
         point.checkedAt = now;
       } else {
         points.delete(id);
