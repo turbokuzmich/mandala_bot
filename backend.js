@@ -13,38 +13,41 @@ const POINT_ALIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 
 config();
 
-const ipcStream = (function () {
+const getIPCStream = (function () {
   let connected = false;
 
-  return streams(function (push, next) {
-    if (connected) {
-      push(null, ipc.of[ipcId]);
-      next();
-    } else {
-      ipc.config.id = ipcId;
-      ipc.config.silent = true;
-      ipc.config.retry = 1500;
-
-      ipc.connectTo(ipcId, function () {
-        connected = true;
-
+  return function () {
+    return streams(function (push) {
+      if (connected) {
         push(null, ipc.of[ipcId]);
-        next();
-      });
-    }
-  });
+        push(null, streams.nil);
+      } else {
+        ipc.config.id = ipcId;
+        ipc.config.silent = true;
+        ipc.config.retry = 1500;
+
+        ipc.connectTo(ipcId, function () {
+          connected = true;
+
+          push(null, ipc.of[ipcId]);
+          push(null, streams.nil);
+        });
+      }
+    });
+  };
 })();
 
 function getUsernameByChatId(id, timeout = 2000) {
   const requestId = uuid();
 
-  return ipcStream
+  return getIPCStream()
     .consume(function (_, ipc, push) {
       const timeoutHandler = setTimeout(onTimeout, timeout);
 
       function onTimeout() {
         ipc.off(ipcMessageName, onMessage);
-        next("reqeust timed out");
+        push("reqeust timed out");
+        push(null, streams.nil);
       }
 
       function onMessage({ request_id, error, username }) {
@@ -54,6 +57,7 @@ function getUsernameByChatId(id, timeout = 2000) {
 
           if (error) {
             push(error);
+            push(null, streams.nil);
           } else {
             push(null, username);
             push(null, streams.nil);
@@ -252,19 +256,6 @@ async function pointHealtchChecker() {
     await delay(CHECK_POINT_TIMEOUT);
   }
 }
-
-// function requestUserInformation(id) {
-//   return timeout(
-//     new Promise(function (resolve, reject) {
-//       ipc.of[ipcId].on(ipcMessageName, ({ username }) => resolve(username));
-//     }),
-//     {
-//       milliseconds: 2000,
-//     }
-//   );
-//   // ipc.of[ipcId].on(ipcMessageName)
-//   // // ipc.of(ipcId).emi
-// }
 
 function startIpcClient() {
   ipc.config.id = ipcId;
