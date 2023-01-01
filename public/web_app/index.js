@@ -1,6 +1,6 @@
 Telegram.WebApp.ready();
 
-noment.locale("ru");
+moment.locale("ru");
 
 const userInfo = document.querySelector(".js-user-info");
 const actionsPane = document.querySelector(".js-pane-actions");
@@ -193,7 +193,7 @@ function renderPointBallonBody(point) {
   );
 
   if (point.description) {
-    parts.push(`<p><b>Комментарий</b>:<br />${point.comment}</p>`);
+    parts.push(`<p><b>Комментарий</b>:<br />${point.description}</p>`);
   }
 
   if (point.status === "created") {
@@ -205,10 +205,31 @@ function renderPointBallonBody(point) {
       )}`
     );
   } else {
-    parts.push("Точка давно никем не подтверждена");
+    parts.push("Точка давно никем не подтверждалась");
+  }
+
+  if (point.votes) {
+    const text = [...point.votes]
+      .reverse()
+      .map(
+        ({ createdAt, createdBy }) =>
+          `${moment(createdAt).format("H:mm:ss")} подтвердил ${createdBy}`
+      )
+      .join("<br />");
+
+    parts.push(`<p><b>Подтверждения</b><br />${text}</p>`);
   }
 
   return parts.join("");
+}
+
+function getPointPlacemarkColor(point) {
+  return {
+    created: "rgb(60, 170, 60)",
+    votes: "red",
+    "unvoted-weak": "rgba(60, 170, 60, 0.7)",
+    "unvoted-strong": "rgba(60, 170, 60, 0.4)",
+  }[point.status];
 }
 
 const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
@@ -225,6 +246,7 @@ const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
           },
           {
             preset: "islands#circleIcon",
+            color: getPointPlacemarkColor(point),
           }
         )
     )
@@ -233,9 +255,7 @@ const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
 );
 
 user$.subscribe(function ({ isAuthorized, username }) {
-  userInfo.innerHTML = isAuthorized
-    ? `Пользователь: ${username}`
-    : "Неавторизованный пользователь";
+  userInfo.innerHTML = isAuthorized ? `Пользователь: ${username}` : "Гость";
 });
 
 newPointCoords$.subscribe(function (coords) {

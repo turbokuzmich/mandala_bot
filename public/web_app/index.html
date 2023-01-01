@@ -72,13 +72,20 @@
   <body>
     <div class="wrapper">
       <nav class="navbar navbar-light bg-light">
-        <span class="navbar-brand h1 mb-0 js-user-info"
-          >Пользователь неизвестен</span
-        >
+        <span class="navbar-brand h1 mb-0 js-user-info"></span>
       </nav>
       <div id="map" class="map"></div>
     </div>
     <div class="pane-container">
+      <div class="pane js-pane-view">
+        <h4>Подтверждение точки</h4>
+        <div class="buttons">
+          <button class="btn btn-primary js-button-confirm">Подтвердить</button>
+          <button class="btn btn-outline-secondary js-button-cancel-vote">
+            Отмена
+          </button>
+        </div>
+      </div>
       <div class="pane js-pane-actions">
         <div class="point-info">
           <h4>Добавление точки</h4>
