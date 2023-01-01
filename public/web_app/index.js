@@ -246,7 +246,7 @@ const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
           },
           {
             preset: "islands#circleIcon",
-            color: getPointPlacemarkColor(point),
+            iconColor: getPointPlacemarkColor(point),
           }
         )
     )
