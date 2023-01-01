@@ -1,13 +1,18 @@
 Telegram.WebApp.ready();
+Telegram.WebApp.expand();
 
 moment.locale("ru");
 
 const userInfo = document.querySelector(".js-user-info");
 const actionsPane = document.querySelector(".js-pane-actions");
+const viewPane = document.querySelector(".js-pane-view");
 const pointInfo = document.querySelector(".js-point-info");
 const pointDescription = document.querySelector(".js-point-description");
 const appendButton = document.querySelector(".js-button-append");
 const cancelButton = document.querySelector(".js-button-cancel");
+const voteButton = document.querySelector(".js-button-vote");
+const voteCancelButton = document.querySelector(".js-button-cancel-vote");
+const refreshButton = document.querySelector(".js-refresh");
 
 const api = axios.create({
   baseURL: "https://m.deluxspa.ru/api",
@@ -113,6 +118,11 @@ const clusterPointSelected$ = rxjs.merge(balloonOpens$, balloonClicks$).pipe(
 const cancelClicks$ = rxjs.fromEvent(cancelButton, "click");
 const appendClicks$ = rxjs.fromEvent(appendButton, "click");
 
+const voteClicks$ = rxjs.fromEvent(voteButton, "click");
+const voteCancelClicks$ = rxjs.fromEvent(voteCancelButton, "click");
+
+const refreshClicks$ = rxjs.fromEvent(refreshButton, "click");
+
 const newPointCoords$ = rxjs
   .merge(
     mapClicks$.pipe(rxjs.map((event) => event.get("coords"))),
@@ -178,8 +188,34 @@ const pointAppended$ = user$.pipe(
   rxjs.share()
 );
 
+const pointVoted$ = user$.pipe(
+  rxjs.map(({ username }) =>
+    selectedPoint$.pipe(
+      rxjs.map((placemark) =>
+        voteClicks$.pipe(
+          rxjs.map(() =>
+            post$("/map/points/vote", {
+              id: placemark.options.get("botPoint").id,
+              user: username,
+            })
+          ),
+          rxjs.switchAll()
+        )
+      ),
+      rxjs.switchAll()
+    )
+  ),
+  rxjs.switchAll(),
+  rxjs.share()
+);
+
 const points$ = rxjs
-  .merge(pointAppended$, ymaps$.pipe(rxjs.mergeMap(() => get$("/map/points"))))
+  .merge(
+    pointAppended$,
+    rxjs
+      .merge(ymaps$, refreshClicks$)
+      .pipe(rxjs.mergeMap(() => get$("/map/points")))
+  )
   .pipe(
     rxjs.map(({ points }) => points),
     rxjs.shareReplay(1)
@@ -204,8 +240,10 @@ function renderPointBallonBody(point) {
         "H:mm:ss"
       )}`
     );
-  } else {
+  } else if (point.status === "unvoted-weak") {
     parts.push("Точка давно никем не подтверждалась");
+  } else {
+    parts.push("Точка очень давно никем не подтверждалась");
   }
 
   if (point.votes) {
@@ -247,12 +285,37 @@ const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
           {
             preset: "islands#circleIcon",
             iconColor: getPointPlacemarkColor(point),
+            botPoint: point,
           }
         )
     )
   ),
   rxjs.shareReplay(1)
 );
+
+const selectedPoint$ = placemarks$.pipe(
+  rxjs.map((placemarks) => rxjs.from(placemarks)),
+  rxjs.mergeAll(),
+  rxjs.map((placemark) =>
+    fromYMapsEvents(placemark, ["click", "mandala_bot:selected"]).pipe(
+      rxjs.map(() => placemark)
+    )
+  ),
+  rxjs.mergeAll()
+);
+
+const alerts$ = rxjs
+  .merge(
+    pointAppended$.pipe(
+      rxjs.map(() => "Точка успешно создана"),
+      rxjs.catchError(() => "Не удалось создать точку")
+    ),
+    pointVoted$.pipe(
+      rxjs.map(() => "Подтверждение получено"),
+      rxjs.catchError(() => "Не удалось подтвердить")
+    )
+  )
+  .pipe(rxjs.share());
 
 user$.subscribe(function ({ isAuthorized, username }) {
   userInfo.innerHTML = isAuthorized ? `Пользователь: ${username}` : "Гость";
@@ -275,7 +338,9 @@ map$
       rxjs
         .of(
           cancelClicks$.pipe(rxjs.map(() => map)),
-          pointAppended$.pipe(rxjs.map(() => map))
+          voteCancelClicks$.pipe(rxjs.map(() => map)),
+          pointAppended$.pipe(rxjs.map(() => map)),
+          pointVoted$.pipe(rxjs.map(() => map))
         )
         .pipe(rxjs.mergeAll())
     ),
@@ -328,4 +393,20 @@ pointAppended$.subscribe(function () {
   pointDescription.value = "";
 });
 
-clusterPointSelected$.subscribe(() => {});
+clusterPointSelected$.subscribe((object) => {
+  object.events.fire("mandala_bot:selected");
+});
+
+rxjs
+  .merge(selectedPoint$, balloonCloses$.pipe(rxjs.map(() => null)))
+  .subscribe((selectedPoint) => {
+    if (selectedPoint) {
+      viewPane.classList.add("visible");
+    } else {
+      viewPane.classList.remove("visible");
+    }
+  });
+
+alerts$.subscribe((alert) => {
+  Telegram.WebApp.showAlert(alert);
+});
