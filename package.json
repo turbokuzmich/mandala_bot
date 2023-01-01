@@ -20,7 +20,8 @@
     "node-telegram-bot-api": "^0.60.0",
     "p-timeout": "^6.0.0",
     "piscina": "^3.2.0",
-    "skia-canvas": "^1.0.1"
+    "skia-canvas": "^1.0.1",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.20"
