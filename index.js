@@ -19,6 +19,9 @@ const serviceCommandsList = ["start", "help", "settings"];
 
 const commands = {
   mandala: { description: "Рассчитать мандалу" },
+  map: { description: "Карта района" },
+  mapview: { description: "Посмотреть карту района" },
+  mappoint: { description: "Отметить точку на карте" },
   start: { description: "Приветственное слово от Димастого" },
   help: {
     description:
@@ -210,6 +213,43 @@ bot.onText(commandRegExps.mandala, async function (message) {
   });
 });
 
+bot.onText(commandRegExps.map, async function (message) {
+  const {
+    message_id,
+    chat: { id },
+  } = message;
+
+  await bot.sendMessage(id, "Посмотреть карту или отметить точку?", {
+    reply_to_message_id: message_id,
+    reply_markup: {
+      keyboard: [[{ text: "/mapview" }, { text: "/mappoint" }]],
+    },
+  });
+});
+
+bot.onText(commandRegExps.mapview, async function (message) {
+  const {
+    message_id,
+    chat: { id },
+  } = message;
+
+  await bot.sendMessage(id, "Карта", {
+    reply_to_message_id: message_id,
+    reply_markup: {
+      keyboard: [
+        [
+          {
+            text: "Карта",
+            web_app: {
+              url: "https://deluxspa.ru/tg/index.html",
+            },
+          },
+        ],
+      ],
+    },
+  });
+});
+
 bot.onText(commandRegExps.start, async function (message) {
   const {
     from: { first_name, last_name },
@@ -266,6 +306,7 @@ bot.on("message", async function (message) {
       },
     });
   }
+  console.log(message);
 });
 
 bot.on("error", (error) => {
