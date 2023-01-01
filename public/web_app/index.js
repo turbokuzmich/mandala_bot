@@ -246,7 +246,7 @@ function renderPointBallonBody(point) {
     parts.push("Точка очень давно никем не подтверждалась");
   }
 
-  if (point.votes) {
+  if (point.votes.length) {
     const text = [...point.votes]
       .reverse()
       .map(

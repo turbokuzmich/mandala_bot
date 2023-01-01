@@ -22,6 +22,10 @@
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap");
 
+      html,
+      body {
+        color: var(--tg-theme-text-color);
+      }
       .wrapper {
         display: flex;
         height: 100vh;
@@ -53,13 +57,10 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background-color: rgba(255, 255, 255, 0.8);
+        background-color: var(--tg-theme-bg-color);
         padding: 20px 20px;
         transition: transform 0.2s ease-out;
         transform: translateY(100%);
-      }
-      .pane_transparent {
-        background-color: transparent;
       }
       .pane.visible {
         transform: translateY(0);
@@ -67,6 +68,12 @@
       .buttons {
         display: flex;
         gap: 12px;
+      }
+      .tg-navbar {
+        background-color: var(--tg-theme-bg-color);
+      }
+      .btn-primary {
+        background-color: var(--tg-theme-button-color);
       }
     </style>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -78,9 +85,9 @@
   </head>
   <body>
     <div class="wrapper">
-      <nav class="navbar navbar-light bg-light">
+      <nav class="navbar tg-navbar">
         <span class="navbar-brand h1 mb-0 js-user-info"></span>
-        <button class="btn btn-outline-secondary btn-sm js-refresh">
+        <button class="btn btn-outline-light btn-sm js-refresh">
           <i class="fa-solid fa-repeat"></i>
         </button>
       </nav>
