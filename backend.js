@@ -1,13 +1,72 @@
 import { config } from "dotenv";
 import { v4 as uuid } from "uuid";
+import streams from "highland";
+import ipc from "node-ipc";
 import get from "lodash/get.js";
 import property from "lodash/property.js";
 import fasify from "fastify";
+import timeout from "p-timeout";
+import { ipcId, ipcMessageName } from "./constants.js";
 
 const CHECK_POINT_TIMEOUT = 1 * 60 * 1000; // 1 minute
 const POINT_ALIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 
 config();
+
+const ipcStream = (function () {
+  let connected = false;
+
+  return streams(function (push, next) {
+    if (connected) {
+      push(null, ipc.of[ipcId]);
+      next();
+    } else {
+      ipc.config.id = ipcId;
+      ipc.config.silent = true;
+      ipc.config.retry = 1500;
+
+      ipc.connectTo(ipcId, function () {
+        connected = true;
+
+        push(null, ipc.of[ipcId]);
+        next();
+      });
+    }
+  });
+})();
+
+function getUsernameByChatId(id, timeout = 2000) {
+  const requestId = uuid();
+
+  return ipcStream
+    .consume(function (_, ipc, push) {
+      const timeoutHandler = setTimeout(onTimeout, timeout);
+
+      function onTimeout() {
+        ipc.off(ipcMessageName, onMessage);
+        next("reqeust timed out");
+      }
+
+      function onMessage({ request_id, error, username }) {
+        if (request_id === requestId) {
+          clearTimeout(timeoutHandler);
+          ipc.off(ipcMessageName, onMessage);
+
+          if (error) {
+            push(error);
+          } else {
+            push(null, username);
+            push(null, streams.nil);
+          }
+        }
+      }
+
+      ipc.on(ipcMessageName, onMessage);
+
+      ipc.emit(ipcMessageName, { request_id: requestId, chat_id: id });
+    })
+    .toPromise(Promise);
+}
 
 /**
  * @readonly
@@ -45,6 +104,30 @@ const apiServer = fasify();
 apiServer.get("/api/map/points", async function () {
   return { status: "success", points: [...points.values()] };
 });
+
+const usernameRequestSchema = {
+  type: "object",
+  required: ["chat_id"],
+  properties: {
+    chat_id: { type: "number" },
+  },
+};
+
+apiServer.get(
+  "/api/me",
+  { schema: { query: usernameRequestSchema } },
+  async function (request, reply) {
+    try {
+      const username = await getUsernameByChatId(request.query.chat_id);
+
+      return { status: "success", username };
+    } catch (error) {
+      reply
+        .code(500)
+        .send({ status: "error", message: "Failed to fetch username" });
+    }
+  }
+);
 
 const pointCreateSchema = {
   type: "object",
@@ -170,10 +253,32 @@ async function pointHealtchChecker() {
   }
 }
 
+// function requestUserInformation(id) {
+//   return timeout(
+//     new Promise(function (resolve, reject) {
+//       ipc.of[ipcId].on(ipcMessageName, ({ username }) => resolve(username));
+//     }),
+//     {
+//       milliseconds: 2000,
+//     }
+//   );
+//   // ipc.of[ipcId].on(ipcMessageName)
+//   // // ipc.of(ipcId).emi
+// }
+
+function startIpcClient() {
+  ipc.config.id = ipcId;
+  ipc.config.silent = true;
+  ipc.config.retry = 1500;
+
+  ipc.connectTo(ipcId);
+}
+
 async function main() {
   try {
     apiServer.listen({ port: process.env.BACKEND_PORT });
     pointHealtchChecker();
+    startIpcClient();
   } catch (error) {
     console.log("failed to listen", error, process.env.BACKEND_PORT);
   }

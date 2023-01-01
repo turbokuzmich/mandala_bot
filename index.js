@@ -1,11 +1,14 @@
 import { writeFile } from "fs/promises";
 import { config } from "dotenv";
+import ipc from "node-ipc";
 import path from "path";
 import TelegramBot from "node-telegram-bot-api";
 import Piscina from "piscina";
 import AbortController from "abort-controller";
 import timeout from "p-timeout";
 import {
+  ipcId,
+  ipcMessageName,
   CalculationStatus,
   calculationTimeout,
   ResultFormat,
@@ -20,8 +23,6 @@ const serviceCommandsList = ["start", "help", "settings"];
 const commands = {
   mandala: { description: "Рассчитать мандалу" },
   map: { description: "Карта района" },
-  mapview: { description: "Посмотреть карту района" },
-  mappoint: { description: "Отметить точку на карте" },
   start: { description: "Приветственное слово от Димастого" },
   help: {
     description:
@@ -219,35 +220,25 @@ bot.onText(commandRegExps.map, async function (message) {
     chat: { id },
   } = message;
 
-  await bot.sendMessage(id, "Посмотреть карту или отметить точку?", {
-    reply_to_message_id: message_id,
-    reply_markup: {
-      keyboard: [[{ text: "/mapview" }, { text: "/mappoint" }]],
-    },
-  });
-});
-
-bot.onText(commandRegExps.mapview, async function (message) {
-  const {
-    message_id,
-    chat: { id },
-  } = message;
-
-  await bot.sendMessage(id, "Карта", {
-    reply_to_message_id: message_id,
-    reply_markup: {
-      keyboard: [
-        [
-          {
-            text: "Карта",
-            web_app: {
-              url: "https://deluxspa.ru/tg/index.html",
+  await bot.sendMessage(
+    id,
+    "Вы сможете посмотреть карту и добавить свою точку",
+    {
+      reply_to_message_id: message_id,
+      reply_markup: {
+        keyboard: [
+          [
+            {
+              text: "Открыть карту",
+              web_app: {
+                url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
+              },
             },
-          },
+          ],
         ],
-      ],
-    },
-  });
+      },
+    }
+  );
 });
 
 bot.onText(commandRegExps.start, async function (message) {
@@ -292,11 +283,14 @@ bot.on("message", async function (message) {
     message_id,
     chat: { id },
     text,
+    web_app_data,
   } = message;
 
   if (mandalaRequests.has(id)) {
     runCalculation(id, message_id, text);
     mandalaRequests.delete(id);
+  } else if (web_app_data) {
+    console.log(web_app_data);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
     await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
       reply_to_message_id: message_id,
@@ -306,7 +300,6 @@ bot.on("message", async function (message) {
       },
     });
   }
-  console.log(message);
 });
 
 bot.on("error", (error) => {
@@ -317,7 +310,35 @@ bot.on("webhook_error", (error) => {
   console.log("Webhook error", error);
 });
 
+function startIpcServer() {
+  ipc.config.id = ipcId;
+  ipc.config.silent = true;
+  ipc.config.retry = 1500;
+
+  ipc.serve(() =>
+    ipc.server.on(
+      ipcMessageName,
+      async function ({ request_id, chat_id }, socket) {
+        try {
+          const { username } = await bot.getChat(chat_id);
+
+          ipc.server.emit(socket, ipcMessageName, { request_id, username });
+        } catch (error) {
+          ipc.server.emit(socket, ipcMessageName, {
+            request_id,
+            error: "Failed to fetch username",
+          });
+        }
+      }
+    )
+  );
+
+  ipc.server.start();
+}
+
 async function main() {
+  startIpcServer();
+
   await bot.setMyCommands(botCommands);
 
   if (isProduction) {

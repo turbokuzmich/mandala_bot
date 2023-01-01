@@ -23,6 +23,9 @@ export const mandalaBlockSize = 30;
 export const mandalaBlocksCount = 16;
 export const mandalaPadding = 70;
 
+export const ipcId = "mandala_bot_ipc_channel";
+export const ipcMessageName = "mandala_bot_ipc_message";
+
 const russianLetters = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
 const englishLetters = "abcdefghijklmnopqrstuvwxyz";
 
