@@ -24,7 +24,7 @@
 
       html,
       body {
-        color: var(--tg-theme-text-color);
+        color: var(--tg-theme-text-color, #000000);
       }
       .wrapper {
         display: flex;
@@ -57,7 +57,7 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background-color: var(--tg-theme-bg-color);
+        background-color: var(--tg-theme-bg-color, rgba(255, 255, 255, 0.8));
         padding: 20px 20px;
         transition: transform 0.2s ease-out;
         transform: translateY(100%);
@@ -70,7 +70,7 @@
         gap: 12px;
       }
       .tg-navbar {
-        background-color: var(--tg-theme-bg-color);
+        background-color: var(--tg-theme-bg-color, #ffffff);
       }
       .btn-primary {
         background-color: var(--tg-theme-button-color);

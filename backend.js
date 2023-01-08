@@ -1,11 +1,12 @@
+import { createRxDatabase } from "rxdb";
+import { getRxStorageMemory } from "rxdb/plugins/memory";
 import { config } from "dotenv";
 import { v4 as uuid } from "uuid";
-import streams from "highland";
 import ipc from "node-ipc";
+import * as rxjs from "rxjs";
 import get from "lodash/get.js";
 import property from "lodash/property.js";
 import fasify from "fastify";
-import timeout from "p-timeout";
 import { ipcId, ipcMessageName } from "./constants.js";
 
 const CHECK_POINT_TIMEOUT = 1 * 60 * 1000; // 1 minute
@@ -13,63 +14,78 @@ const POINT_ALIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 
 config();
 
-const getIPCStream = (function () {
-  let connected = false;
+function connectToIPC(ipc, to) {
+  return new rxjs.Observable(function (subscriber) {
+    let isSubscribed = true;
 
-  return function () {
-    return streams(function (push) {
-      if (connected) {
-        push(null, ipc.of[ipcId]);
-        push(null, streams.nil);
-      } else {
-        ipc.config.id = ipcId;
-        ipc.config.silent = true;
-        ipc.config.retry = 1500;
-
-        ipc.connectTo(ipcId, function () {
-          connected = true;
-
-          push(null, ipc.of[ipcId]);
-          push(null, streams.nil);
-        });
+    ipc.connectTo(to, function () {
+      if (isSubscribed) {
+        subscriber.next(ipc);
+        subscriber.complete();
       }
     });
-  };
-})();
+
+    return function () {
+      isSubscribed = false;
+    };
+  });
+}
+
+const IPCClient$ = rxjs.of(ipc).pipe(
+  rxjs.map((ipc) => {
+    ipc.config.id = ipcId;
+    ipc.config.silent = true;
+    ipc.config.retry = 1500;
+
+    return connectToIPC(ipc, ipcId);
+  }),
+  rxjs.mergeAll(),
+  rxjs.shareReplay(1)
+);
 
 function getUsernameByChatId(id, timeout = 2000) {
-  const requestId = uuid();
+  return IPCClient$.pipe(
+    rxjs.map((ipc) => {
+      return new rxjs.Observable((subscriber) => {
+        const requestId = uuid();
+        const timeoutHandler = setTimeout(onTimeout, timeout);
 
-  return getIPCStream()
-    .consume(function (_, ipc, push) {
-      const timeoutHandler = setTimeout(onTimeout, timeout);
+        function onTimeout() {
+          ipc.of[ipcId].off(ipcMessageName, onMessage);
 
-      function onTimeout() {
-        ipc.off(ipcMessageName, onMessage);
-        push("reqeust timed out");
-        push(null, streams.nil);
-      }
+          subscriber.error("request timed out");
+        }
 
-      function onMessage({ request_id, error, username }) {
-        if (request_id === requestId) {
-          clearTimeout(timeoutHandler);
-          ipc.off(ipcMessageName, onMessage);
+        function onMessage({ request_id, error, username }) {
+          console.log(request_id, error, username)
+          if (request_id === requestId) {
+            clearTimeout(timeoutHandler);
+            ipc.of[ipcId].off(ipcMessageName, onMessage);
 
-          if (error) {
-            push(error);
-            push(null, streams.nil);
-          } else {
-            push(null, username);
-            push(null, streams.nil);
+            if (error) {
+              subscriber.error(error);
+            } else {
+              subscriber.next(username);
+              subscriber.complete();
+            }
           }
         }
-      }
 
-      ipc.on(ipcMessageName, onMessage);
+        ipc.of[ipcId].on(ipcMessageName, onMessage);
 
-      ipc.emit(ipcMessageName, { request_id: requestId, chat_id: id });
-    })
-    .toPromise(Promise);
+        ipc.of[ipcId].emit(ipcMessageName, {
+          request_id: requestId,
+          chat_id: id,
+        });
+
+        return () => {
+          clearTimeout(timeoutHandler);
+          ipc.of[ipcId].off(ipcMessageName, onMessage);
+        };
+      });
+    }),
+    rxjs.mergeAll()
+  );
 }
 
 /**
@@ -102,11 +118,84 @@ const PointStatus = {
  */
 
 const points = new Map();
+const db = await createRxDatabase({
+  name: "dps",
+  storage: getRxStorageMemory(),
+});
+
+await db.addCollections({
+  points: {
+    schema: {
+      title: "Police patrol points",
+      version: 0,
+      primaryKey: "id",
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          minLength: 36,
+          maxLength: 36,
+        },
+        status: {
+          type: "string",
+          enum: Object.values(PointStatus),
+        },
+        createdBy: {
+          type: "string",
+        },
+        createdAt: {
+          type: "integer",
+        },
+        latitude: {
+          type: "number",
+        },
+        longitude: {
+          type: "number",
+        },
+        description: {
+          type: "string",
+        },
+        votes: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["createdAt", "createdBy"],
+            properties: {
+              createdAt: {
+                type: "integer",
+              },
+              createdBy: {
+                type: "string",
+              },
+            },
+          },
+        },
+        votedAt: {
+          type: "integer",
+        },
+        checkedAt: {
+          type: "integer",
+        },
+      },
+      required: [
+        "id",
+        "status",
+        "createdBy",
+        "createdAt",
+        "latitude",
+        "longitude",
+        "votes",
+      ],
+    },
+  },
+});
 
 const apiServer = fasify();
 
 apiServer.get("/api/map/points", async function () {
-  return { status: "success", points: [...points.values()] };
+  const points = await db.points.find().exec();
+
+  return { status: "success", points: points.map((point) => point.toJSON()) };
 });
 
 const usernameRequestSchema = {
@@ -120,16 +209,19 @@ const usernameRequestSchema = {
 apiServer.get(
   "/api/me",
   { schema: { query: usernameRequestSchema } },
-  async function (request, reply) {
-    try {
-      const username = await getUsernameByChatId(request.query.chat_id);
-
-      return { status: "success", username };
-    } catch (error) {
-      reply
-        .code(500)
-        .send({ status: "error", message: "Failed to fetch username" });
-    }
+  function (request, reply) {
+    getUsernameByChatId(request.query.chat_id).subscribe({
+      next(username) {
+        console.log("fetched ok");
+        reply.code(200).send({ status: "success", username });
+      },
+      error() {
+        console.log("fetch failed");
+        reply
+          .code(200)
+          .send({ status: "error", message: "Failed to fetch username" });
+      },
+    });
   }
 );
 
@@ -158,7 +250,7 @@ apiServer.post(
       description = "",
     } = request.body;
 
-    points.set(id, {
+    await db.points.upsert({
       id,
       status,
       createdBy,
@@ -169,7 +261,13 @@ apiServer.post(
       votes: [],
     });
 
-    return { id, status: "success", points: [...points.values()] };
+    const points = await db.points.find().exec();
+
+    return {
+      id,
+      status: "success",
+      points: points.map((point) => point.toJSON()),
+    };
   }
 );
 
@@ -188,22 +286,22 @@ apiServer.post(
   async function (request, reply) {
     const { id, user } = request.body;
 
-    if (!points.has(id)) {
+    const point = await db.points.findOne(id).exec();
+
+    if (point === null) {
       return reply
         .code(404)
         .send({ status: "error", message: "point not found" });
     }
 
-    const point = points.get(id);
-
-    if (point.createdBy === user) {
+    if (point.get("createdBy") === user) {
       return reply.code(403).send({
         status: "error",
         message: "you are not allowed to vote for your point",
       });
     }
 
-    const votes = get(point, "votes", []);
+    const votes = point.get("votes").map((vote) => vote.toJSON());
 
     if (votes.find(({ createdBy }) => createdBy === user)) {
       return reply
@@ -215,11 +313,17 @@ apiServer.post(
 
     votes.push({ createdAt: now, createdBy: user });
 
-    point.status = PointStatus.voted;
-    point.votes = votes;
-    point.votedAt = now;
+    await point.update({
+      $set: {
+        votes,
+        status: PointStatus.voted,
+        votedAt: now,
+      },
+    });
 
-    return { status: "success", points: [...points.values()] };
+    const points = await db.points.find().exec();
+
+    return { status: "success", points: points.map((point) => point.toJSON()) };
   }
 );
 
@@ -229,7 +333,7 @@ function delay(ms = 1000) {
   });
 }
 
-async function pointHealtchChecker() {
+async function startPointsChecker() {
   while (true) {
     const now = Date.now();
 
@@ -258,19 +362,10 @@ async function pointHealtchChecker() {
   }
 }
 
-function startIpcClient() {
-  ipc.config.id = ipcId;
-  ipc.config.silent = true;
-  ipc.config.retry = 1500;
-
-  ipc.connectTo(ipcId);
-}
-
 async function main() {
   try {
     apiServer.listen({ port: process.env.BACKEND_PORT });
-    pointHealtchChecker();
-    startIpcClient();
+    // startPointsChecker();
   } catch (error) {
     console.log("failed to listen", error, process.env.BACKEND_PORT);
   }

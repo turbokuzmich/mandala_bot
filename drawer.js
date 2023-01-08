@@ -1,398 +1,169 @@
-import Color from "color";
-import range from "lodash/range.js";
+import Text from "./drawer/text.js";
+import Title from "./drawer/title.js";
+import Mandala from "./drawer/mandala.js";
+import Calculations from "./drawer/calculations.js";
+import Background from "./drawer/background.js";
+import ColorGenerator from "./drawer/color-generator.js";
+import { Easing } from "./drawer/base.js";
+import { Layout, LayoutBlock } from "./drawer/layout.js";
 import { isMainThread } from "worker_threads";
 import { readFile } from "fs/promises";
 import { resolve } from "path";
 import { move } from "piscina";
 import { Canvas, FontLibrary } from "skia-canvas";
 
+import { withDir } from "tmp-promise";
+import { spawn } from "child_process";
+import { copyFile } from "fs/promises";
+
 import {
   font,
-  symbolWidth,
-  symbolHeight,
   padding,
-  mandalaBlockSize,
+  colorBlack,
   mandalaBlocksCount,
   mandalaPadding,
   titlePadding,
-  resultTitle,
 } from "./constants.js";
 
-class ColorGenerator {
-  size = 3;
-
-  minHue = 0;
-  maxHue = 360;
-
-  restrictedHueStart = 280;
-  restrictedHueEnd = 316;
-
-  minSaturation = 90;
-  maxSaturation = 100;
-
-  minLightness = 70;
-  maxLightness = 80;
-
-  rotation = 10;
-
-  constructor(size = 3, rotation = 10) {
-    this.size = size;
-    this.rotation = rotation;
-  }
-
-  random(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
-  rotate(hue) {
-    const newHue = hue + this.rotation;
-    const correctedHue = newHue > this.maxHue ? newHue - this.maxHue : newHue;
-
-    if (
-      correctedHue > this.restrictedHueStart &&
-      correctedHue < this.restrictedHueEnd
-    ) {
-      const beautifulHue =
-        this.restrictedHueEnd + correctedHue - this.restrictedHueStart;
-
-      return beautifulHue > this.maxHue
-        ? beautifulHue - this.maxHue
-        : beautifulHue;
-    }
-
-    return correctedHue;
-  }
-
-  getHue() {
-    while (true) {
-      const hue = this.random(this.minHue, this.maxHue);
-
-      if (hue > this.restrictedHueStart && hue < this.restrictedHueEnd) {
-        continue;
-      }
-
-      return hue;
-    }
-  }
-
-  [Symbol.iterator]() {
-    let index = 0;
-    let baseColor = null;
-
-    return {
-      next: () => {
-        if (index === this.size) {
-          return { done: true };
-        }
-
-        const current = index;
-        index++;
-
-        if (current === 0) {
-          const hue = this.getHue();
-          const saturation = this.random(
-            this.minSaturation,
-            this.maxSaturation
-          );
-          const lightness = this.random(this.minLightness, this.maxLightness);
-
-          baseColor = Color.hsl(hue, saturation, lightness);
-
-          return { done: false, value: baseColor };
-        } else {
-          const {
-            color: [baseHue, baseSaturation],
-          } = baseColor;
-
-          const hue = range(current).reduce((hue) => this.rotate(hue), baseHue);
-          const lightness = this.random(this.minLightness, this.maxLightness);
-
-          return {
-            done: false,
-            value: Color.hsl(hue, baseSaturation, lightness),
-          };
-        }
-      },
-    };
-  }
-}
-
-function degreesToRadians(degrees) {
-  return degrees * (Math.PI / 180);
-}
-
-class BlockRowsGenerator {
-  side = 16;
-
-  constructor(side = 16) {
-    this.side = side;
-  }
-
-  [Symbol.iterator]() {
-    let row = 0;
-
-    return {
-      next: () => {
-        if (row === this.side) {
-          return { done: true };
-        }
-
-        const result = { row, count: this.side - row };
-
-        row++;
-
-        return { done: false, value: result };
-      },
-    };
-  }
-}
-
-function calculateCanvasSize(context, originalText, lines) {
-  const linesWidth = lines[0].length * symbolWidth;
-  const linesHeight = (lines.length + 1) * symbolHeight;
-
-  const widthProjection = Math.cos(degreesToRadians(30));
-  const heightProjection = Math.sin(degreesToRadians(30));
-  const blockProjectionWidth = mandalaBlockSize * widthProjection;
-  const blockProjectionHeight = mandalaBlockSize * heightProjection;
-
-  const mandalaWidth =
-    widthProjection *
-    (mandalaBlockSize * mandalaBlocksCount + blockProjectionWidth) *
-    2;
-
-  const mandalaHeight =
-    (mandalaBlockSize * mandalaBlocksCount + blockProjectionHeight) * 2;
-
-  const {
-    lines: [titleMeasure],
-  } = context.measureText(resultTitle, Infinity);
-
-  const {
-    lines: [textMeasure],
-  } = context.measureText(`«${originalText}»`, Infinity);
-
-  const titleHeight = Math.ceil(titleMeasure.height + textMeasure.height);
-
-  const contentWidth =
-    Math.ceil(
-      Math.max(titleMeasure.width, textMeasure.width, linesWidth, mandalaWidth)
-    ) +
-    padding * 2;
-
-  const contentHeight =
-    titleHeight +
-    titlePadding +
-    mandalaHeight +
-    mandalaPadding +
-    linesHeight +
-    padding * 2;
-
-  return [contentWidth, contentHeight, titleHeight, mandalaHeight];
-}
-
-function drawTitle(context, originalText) {
-  const { canvas } = context;
-  const text = `«${originalText}»`;
-
-  const {
-    lines: [titleMeasure],
-  } = context.measureText(resultTitle, Infinity);
-  const {
-    lines: [textMeasure],
-  } = context.measureText(text, Infinity);
-
-  context.save();
-  context.translate(
-    padding + (canvas.width - padding * 2 - titleMeasure.width) / 2,
-    padding
-  );
-  context.fillText(resultTitle, 0, -titleMeasure.y);
-  context.restore();
-
-  context.save();
-  context.translate(
-    padding + (canvas.width - padding * 2 - textMeasure.width) / 2,
-    padding + titleMeasure.height
-  );
-  context.fillText(text, 0, -titleMeasure.y);
-  context.restore();
-}
-
-function drawCalculations(context, lines, colors, titleHeight, mandalaHeight) {
-  const linesContentLeftOffset =
-    padding +
-    (context.canvas.width - padding * 2 - lines[0].length * symbolWidth) / 2;
-
-  context.save();
-  context.translate(
-    linesContentLeftOffset,
-    padding + titleHeight + titlePadding + mandalaHeight + mandalaPadding
-  );
-
-  lines[0].forEach(({ letter }, index) => {
-    const symbol = letter ? letter : "—";
-
-    context.save();
-    context.translate(symbolWidth * index, 0);
-
-    const {
-      lines: [{ y, width, height }],
-    } = context.measureText(symbol);
-
-    context.fillText(
-      symbol,
-      (symbolWidth - width) / 2,
-      -y + (symbolHeight - height) / 2
-    );
-
-    context.restore();
-  });
-
-  context.restore();
-  context.translate(
-    linesContentLeftOffset,
-    padding +
-      titleHeight +
-      titlePadding +
-      mandalaHeight +
-      mandalaPadding +
-      symbolHeight
-  );
-  context.save();
-
-  lines.forEach((line, lineIndex) => {
-    const lineTopPadding = symbolHeight * lineIndex;
-    const lineLeftPadding =
-      (context.canvas.width -
-        (linesContentLeftOffset * 2 + symbolWidth * line.length)) /
-      2;
-
-    context.save();
-    context.translate(lineLeftPadding, lineTopPadding);
-
-    line.forEach(({ index: symbol }, symbolIndex) => {
-      context.save();
-      context.translate(symbolWidth * symbolIndex, 0);
-
-      const {
-        lines: [{ y, width, height }],
-      } = context.measureText(symbol);
-
-      context.fillStyle = colors[symbol].alpha(0.3).rgb();
-      context.fillRect(0, 0, symbolWidth, symbolHeight);
-      context.fillStyle = "#000";
-
-      context.fillText(
-        symbol,
-        (symbolWidth - width) / 2,
-        -y + (symbolHeight - height) / 2
-      );
-
-      context.restore();
-    });
-
-    context.restore();
-  });
-
-  context.restore();
-}
-
-function drawMandala(context, lines, colors, titleHeight) {
-  const indices = lines.reduceRight((result, line) => [...result, line], []);
-
-  const angle = degreesToRadians(60);
-  const widthProjection = Math.cos(degreesToRadians(30));
-  const heightProjection = Math.sin(degreesToRadians(30));
-
-  const blockProjectionWidth = mandalaBlockSize * widthProjection;
-  const blockProjectionHeight = mandalaBlockSize * heightProjection;
-  const blockRows = [...new BlockRowsGenerator(mandalaBlocksCount)];
-
-  context.save();
-
-  context.translate(
-    context.canvas.width / 2,
-    padding +
-      titleHeight +
-      titlePadding +
-      mandalaBlockSize * mandalaBlocksCount +
-      blockProjectionHeight
-  );
-
-  for (let sideIndex = 0; sideIndex < 6; sideIndex++) {
-    context.save();
-    context.rotate(angle * sideIndex);
-
-    for (const { row, count } of blockRows) {
-      for (let blockIndex = 0; blockIndex < count; blockIndex++) {
-        const x1 = row * blockProjectionWidth;
-        const y1 = mandalaBlockSize * blockIndex + row * blockProjectionHeight;
-        const x2 = x1 + blockProjectionWidth;
-        const y2 = y1 + blockProjectionHeight;
-        const x3 = x2;
-        const y3 = y2 + mandalaBlockSize;
-        const x4 = x1;
-        const y4 = y1 + mandalaBlockSize;
-
-        context.fillStyle =
-          colors[indices[blockIndex + row][blockIndex].index - 1].hex();
-
-        context.beginPath();
-        context.moveTo(x1, y1);
-        context.lineTo(x2, y2);
-        context.lineTo(x3, y3);
-        context.lineTo(x4, y4);
-        context.closePath();
-        context.fill();
-      }
-    }
-
-    context.restore();
-  }
-
-  context.restore();
+function buildAnimationFramesInput(duration = 10) {
+  return function (start = 0) {
+    return [start, start + duration - 1];
+  };
 }
 
 async function initialize() {
   FontLibrary.use("Roboto", resolve(process.cwd(), "roboto.ttf"));
 
   return async function ({ originalText, mandala, lines }) {
+    const animateTextFrom = buildAnimationFramesInput(80);
+
     const canvas = new Canvas();
     const context = canvas.getContext("2d");
-
-    const colors = [
-      ...new ColorGenerator(
-        mandalaBlocksCount,
-        20 + Math.round(Math.random() * 40)
-      ),
-    ];
+    const colors = ColorGenerator.getColors(mandalaBlocksCount);
+    const layout = new Layout(context);
 
     context.font = font;
 
-    const [width, height, titleHeight, mandalaHeight] = calculateCanvasSize(
-      context,
-      originalText,
-      lines
-    );
+    const title = new Title(context, colorBlack, {
+      y: [animateTextFrom(0), [-100, 0], Easing.out(Easing.cubic)],
+      opacity: [animateTextFrom(0), [0, 1], Easing.out(Easing.cubic)],
+    });
+    const text = new Text(context, originalText, colorBlack, {
+      y: [animateTextFrom(10), [-100, 0], Easing.out(Easing.cubic)],
+      opacity: [animateTextFrom(10), [0, 1], Easing.out(Easing.cubic)],
+    });
+    const blocks = new Mandala(context, mandala, colors);
+    const calculations = new Calculations(context, lines, colors, colorBlack);
+
+    blocks.addRowsAnimation({
+      property: "opacity",
+      start: 30,
+      duration: 10,
+      durationGrowth: 10,
+      delay: 1,
+      delayGrowth: 0,
+      values: [0, 1],
+      easing: Easing.out(Easing.cubic),
+    });
+
+    calculations.addRowsAnimation({
+      property: "opacity",
+      start: 40,
+      duration: 10,
+      durationGrowth: 10,
+      delay: 1,
+      delayGrowth: 0,
+      values: [0, 1],
+      easing: Easing.out(Easing.cubic),
+    });
+
+    const titleblock = new LayoutBlock(context, title, "center", {
+      left: padding,
+      top: padding,
+      right: padding,
+    });
+    const textBlock = new LayoutBlock(context, text, "center", {
+      left: padding,
+      right: padding,
+    });
+    const blocksBlock = new LayoutBlock(context, blocks, "center", {
+      left: padding,
+      top: titlePadding,
+      right: padding,
+    });
+    const calculationsBlock = new LayoutBlock(context, calculations, "center", {
+      left: padding,
+      top: mandalaPadding,
+      right: padding,
+      bottom: padding,
+    });
+
+    layout.appendBlock(titleblock);
+    layout.appendBlock(textBlock);
+    layout.appendBlock(blocksBlock);
+    layout.appendBlock(calculationsBlock);
+
+    const {
+      size: { width, height },
+    } = layout;
 
     canvas.width = width;
     canvas.height = height;
 
-    const gradient = context.createLinearGradient(0, 0, 0, height);
+    const background = new Background(
+      context,
+      { y2: height },
+      { width, height },
+      [
+        { at: 0, color: "#fefefe" },
+        { at: 1, color: "#dddddd" },
+      ]
+    );
 
-    gradient.addColorStop(0, "#fefefe");
-    gradient.addColorStop(1, "#ddd");
-
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, width, height);
-    context.fillStyle = "#000";
+    background.render();
 
     context.font = font;
 
-    drawTitle(context, originalText);
-    drawMandala(context, mandala, colors, titleHeight);
-    drawCalculations(context, lines, colors, titleHeight, mandalaHeight);
+    layout.render();
+
+    // const fps = 60;
+    // const framesPerVideo = layout.getFramesCount();
+
+    // await withDir(
+    //   async function ({ path }) {
+    //     try {
+    //       for (let frame = 0; frame < framesPerVideo; frame++) {
+    //         context.clearRect(0, 0, width, height);
+
+    //         background.render();
+
+    //         context.font = font;
+
+    //         layout.setFrame(frame);
+    //         layout.render();
+
+    //         const name =
+    //           "slice-" +
+    //           ("000" + frame).substring(("000" + frame).length - 3) +
+    //           ".png";
+
+    //         await canvas.saveAs(resolve(path, name), { density: 2 });
+    //         console.log("rendered", frame + 1, "of", framesPerVideo);
+    //       }
+
+    //       await renderVideo(path, fps);
+    //       await copyFile(
+    //         resolve(path, "video.mp4"),
+    //         resolve(process.cwd(), "out", "video.mp4")
+    //       );
+    //     } catch (error) {
+    //       console.log(error);
+    //     }
+    //   },
+    //   {
+    //     unsafeCleanup: true,
+    //   }
+    // );
 
     if (isMainThread) {
       await canvas.saveAs("./out.png");
@@ -400,6 +171,46 @@ async function initialize() {
       return move(await canvas.toBuffer("png", { density: 2 }));
     }
   };
+}
+
+function renderVideo(path, fps) {
+  return new Promise(function (resolve, reject) {
+    const converter = spawn(
+      "ffmpeg",
+      [
+        "-framerate",
+        fps,
+        "-i",
+        "./slice-%03d.png",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "video.mp4",
+      ],
+      {
+        cwd: path,
+      }
+    );
+
+    converter.stdout.on("data", (data) => {
+      console.log(`ffmpeg: ${data}`);
+    });
+
+    converter.stderr.on("data", (data) => {
+      console.error(`ffmpeg: ${data}`);
+    });
+
+    converter.on("close", (code) => {
+      if (code === 0) {
+        console.log("ffmpeg: converted");
+        resolve();
+      } else {
+        console.log("ffmpeg: failed");
+        reject("ffmpeg failed");
+      }
+    });
+  });
 }
 
 async function main() {

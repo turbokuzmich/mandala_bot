@@ -1,3 +1,5 @@
+import Color from "color";
+
 export const CalculationStatus = {
   Validation: "validation",
   Success: "success",
@@ -25,6 +27,8 @@ export const mandalaPadding = 70;
 
 export const ipcId = "mandala_bot_ipc_channel";
 export const ipcMessageName = "mandala_bot_ipc_message";
+
+export const colorBlack = Color({ r: 0, g: 0, b: 0 });
 
 const russianLetters = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
 const englishLetters = "abcdefghijklmnopqrstuvwxyz";

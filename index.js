@@ -165,7 +165,6 @@ function getCalculationTimeoutCallback({ chat, message }) {
 
 function getCalculationFailCallback({ chat, message }) {
   return function (error) {
-    console.log(error);
     bot.sendMessage(
       chat,
       "Возникла ошибка при расчете. Пожалуйста, повторите позже.",
@@ -319,6 +318,7 @@ function startIpcServer() {
     ipc.server.on(
       ipcMessageName,
       async function ({ request_id, chat_id }, socket) {
+        console.log('request', request_id, chat_id)
         try {
           const { username } = await bot.getChat(chat_id);
 
