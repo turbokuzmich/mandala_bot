@@ -161,6 +161,16 @@ const user$ = ymaps$.pipe(
   rxjs.shareReplay(1)
 );
 
+const socketMessage$ = user$.pipe(
+  rxjs.map(() => io()),
+  rxjs.map((socket) =>
+    rxjs.fromEvent(socket, "connect").pipe(rxjs.map(() => socket))
+  ),
+  rxjs.switchAll(),
+  rxjs.map((socket) => rxjs.fromEvent(socket, "point")),
+  rxjs.switchAll()
+);
+
 const pointAppended$ = user$.pipe(
   rxjs.map(({ username }) =>
     newPointCoords$.pipe(
@@ -221,6 +231,32 @@ const points$ = rxjs
     rxjs.shareReplay(1)
   );
 
+const pointsUpdates$ = socketMessage$.pipe(
+  rxjs.map(({ action, document }) =>
+    points$.pipe(
+      rxjs.take(1),
+      rxjs.map((points) => {
+        if (action === "update") {
+          return points.map((point) =>
+            point.id === document.id ? document : point
+          );
+        }
+        if (action === "insert") {
+          if (!points.find((point) => point.id === document.id)) {
+            return [...points, document];
+          }
+        }
+        if (action === "delete") {
+          return points.filter((point) => point.id !== document.id);
+        }
+
+        return points;
+      })
+    )
+  ),
+  rxjs.switchAll()
+);
+
 function renderPointBallonBody(point) {
   const parts = [];
 
@@ -270,28 +306,30 @@ function getPointPlacemarkColor(point) {
   }[point.status];
 }
 
-const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
-  rxjs.map(([points, ymaps]) =>
-    points.map(
-      (point) =>
-        new ymaps.Placemark(
-          [point.latitude, point.longitude],
-          {
-            balloonContentHeader: `${point.latitude.toPrecision(
-              6
-            )}, ${point.longitude.toPrecision(6)}`,
-            balloonContentBody: renderPointBallonBody(point),
-          },
-          {
-            preset: "islands#circleIcon",
-            iconColor: getPointPlacemarkColor(point),
-            botPoint: point,
-          }
-        )
-    )
-  ),
-  rxjs.shareReplay(1)
-);
+const placemarks$ = rxjs
+  .combineLatest([rxjs.merge(points$, pointsUpdates$), ymaps$])
+  .pipe(
+    rxjs.map(([points, ymaps]) =>
+      points.map(
+        (point) =>
+          new ymaps.Placemark(
+            [point.latitude, point.longitude],
+            {
+              balloonContentHeader: `${point.latitude.toPrecision(
+                6
+              )}, ${point.longitude.toPrecision(6)}`,
+              balloonContentBody: renderPointBallonBody(point),
+            },
+            {
+              preset: "islands#circleIcon",
+              iconColor: getPointPlacemarkColor(point),
+              botPoint: point,
+            }
+          )
+      )
+    ),
+    rxjs.shareReplay(1)
+  );
 
 const selectedPoint$ = placemarks$.pipe(
   rxjs.map((placemarks) => rxjs.from(placemarks)),
@@ -408,5 +446,9 @@ rxjs
   });
 
 alerts$.subscribe((alert) => {
-  Telegram.WebApp.showAlert(alert);
+  try {
+    Telegram.WebApp.showAlert(alert);
+  } catch (error) {
+    console.log("Unable to show telegram alert dialog");
+  }
 });

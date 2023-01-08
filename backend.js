@@ -438,7 +438,7 @@ function setupWebsocket() {
           {}
         );
 
-      client.emit(`point:${event.operation.toLowerCase()}`, document);
+      client.emit("point", { action: event.operation.toLowerCase(), document });
     }
   });
 }
