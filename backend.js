@@ -58,7 +58,6 @@ function getUsernameByChatId(id, timeout = 2000) {
         }
 
         function onMessage({ request_id, error, username }) {
-          console.log(request_id, error, username);
           if (request_id === requestId) {
             clearTimeout(timeoutHandler);
             ipc.of[ipcId].off(ipcMessageName, onMessage);
@@ -214,11 +213,9 @@ apiServer.get(
   function (request, reply) {
     getUsernameByChatId(request.query.chat_id).subscribe({
       next(username) {
-        console.log("fetched ok");
         reply.code(200).send({ status: "success", username });
       },
       error() {
-        console.log("fetch failed");
         reply
           .code(200)
           .send({ status: "error", message: "Failed to fetch username" });
@@ -345,10 +342,10 @@ async function startPointsChecker() {
           $or: [
             {
               checkedAt: { $exists: false },
-              createdAt: { $gt: now - POINT_ALIVE_TIMEOUT },
+              createdAt: { $lt: now - POINT_ALIVE_TIMEOUT },
             },
             {
-              checkedAt: { $gt: now - POINT_ALIVE_TIMEOUT },
+              checkedAt: { $lt: now - POINT_ALIVE_TIMEOUT },
             },
           ],
         },

@@ -219,42 +219,37 @@ const pointVoted$ = user$.pipe(
   rxjs.share()
 );
 
-const points$ = rxjs
+const fetchedPoints$ = rxjs
   .merge(
     pointAppended$,
     rxjs
       .merge(ymaps$, refreshClicks$)
       .pipe(rxjs.mergeMap(() => get$("/map/points")))
   )
-  .pipe(
-    rxjs.map(({ points }) => points),
-    rxjs.shareReplay(1)
-  );
+  .pipe(rxjs.map(({ points }) => ({ action: "list", points })));
 
-const pointsUpdates$ = socketMessage$.pipe(
-  rxjs.map(({ action, document }) =>
-    points$.pipe(
-      rxjs.take(1),
-      rxjs.map((points) => {
-        if (action === "update") {
-          return points.map((point) =>
-            point.id === document.id ? document : point
-          );
-        }
-        if (action === "insert") {
-          if (!points.find((point) => point.id === document.id)) {
-            return [...points, document];
-          }
-        }
-        if (action === "delete") {
-          return points.filter((point) => point.id !== document.id);
-        }
+const points$ = rxjs.merge(fetchedPoints$, socketMessage$).pipe(
+  rxjs.scan((points, event) => {
+    if (event.action === "list") {
+      return event.points;
+    }
+    if (event.action === "update") {
+      return points.map((point) =>
+        point.id === event.document.id ? event.document : point
+      );
+    }
+    if (event.action === "insert") {
+      if (!points.find((point) => point.id === event.document.id)) {
+        return [...points, event.document];
+      }
+    }
+    if (event.action === "delete") {
+      return points.filter((point) => point.id !== event.document.id);
+    }
 
-        return points;
-      })
-    )
-  ),
-  rxjs.switchAll()
+    return points;
+  }, []),
+  rxjs.shareReplay(1)
 );
 
 function renderPointBallonBody(point) {
@@ -307,7 +302,7 @@ function getPointPlacemarkColor(point) {
 }
 
 const placemarks$ = rxjs
-  .combineLatest([rxjs.merge(points$, pointsUpdates$), ymaps$])
+  .combineLatest([points$, ymaps$])
   .pipe(
     rxjs.map(([points, ymaps]) =>
       points.map(
@@ -346,11 +341,11 @@ const alerts$ = rxjs
   .merge(
     pointAppended$.pipe(
       rxjs.map(() => "Точка успешно создана"),
-      rxjs.catchError(() => "Не удалось создать точку")
+      rxjs.catchError(() => rxjs.of("Не удалось создать точку"))
     ),
     pointVoted$.pipe(
       rxjs.map(() => "Подтверждение получено"),
-      rxjs.catchError(() => "Не удалось подтвердить")
+      rxjs.catchError(() => rxjs.of("Не удалось подтвердить"))
     )
   )
   .pipe(rxjs.share());
