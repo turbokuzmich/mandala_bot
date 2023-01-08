@@ -342,15 +342,6 @@ function renderPointBallonBody(point) {
   return parts.join("");
 }
 
-function getPointPlacemarkColor(point) {
-  return {
-    created: "rgb(60, 170, 60)",
-    voted: "red",
-    "unvoted-weak": "rgba(60, 170, 60, 0.7)",
-    "unvoted-strong": "rgba(60, 170, 60, 0.4)",
-  }[point.status];
-}
-
 const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
   rxjs.map(([points, ymaps]) =>
     points.map(
@@ -364,8 +355,10 @@ const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
             balloonContentBody: renderPointBallonBody(point),
           },
           {
-            preset: "islands#circleIcon",
-            iconColor: getPointPlacemarkColor(point),
+            iconLayout: "default#image",
+            iconImageHref: `//m.deluxspa.ru/web_app/images/icons/${point.status}.png`,
+            iconImageSize: [48, 48],
+            iconImageOffset: [-24, -48],
             botPoint: point,
           }
         )
