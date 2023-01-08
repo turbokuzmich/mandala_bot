@@ -261,6 +261,7 @@ apiServer.post(
       longitude,
       user: createdBy,
       description = "",
+      medical = false,
     } = request.body;
 
     await db.points.upsert({
@@ -272,6 +273,7 @@ apiServer.post(
       latitude,
       longitude,
       description,
+      medical,
       votes: [],
     });
 
