@@ -9,8 +9,28 @@ import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
 import { ipcId, ipcMessageName } from "./constants.js";
 
-const CHECK_POINT_TIMEOUT = 10 * 1000; // 10 seconds
-const POINT_TIMEOUT = 2 * 60 * 1000; // 2 minutes
+const sec = (value = 1) => value * 1000;
+const min = (value = 1) => value * sec(60);
+
+/**
+ * @readonly
+ * @enum {string}
+ */
+const PointStatus = {
+  created: "created",
+  voted: "voted",
+  unvotedWeak: "unvoted-weak",
+  unvotedStrong: "unvoted-strong",
+};
+
+const POINT_TIMEOUTS = {
+  [PointStatus.created]: min(),
+  [PointStatus.voted]: min(2),
+  [PointStatus.unvotedWeak]: min(5),
+  [PointStatus.unvotedStrong]: min(10),
+};
+
+const CHECK_POINTS_INTERVAL = sec(10);
 
 addRxPlugin(RxDBUpdatePlugin);
 config();
@@ -87,17 +107,6 @@ function getUsernameByChatId(id, timeout = 2000) {
     rxjs.mergeAll()
   );
 }
-
-/**
- * @readonly
- * @enum {string}
- */
-const PointStatus = {
-  created: "created",
-  voted: "voted",
-  unvotedWeak: "unvoted-weak",
-  unvotedStrong: "unvoted-strong",
-};
 
 /**
  * @typedef {Object} PointVote
@@ -242,7 +251,7 @@ apiServer.post(
     const id = uuid();
     const status = PointStatus.created;
     const createdAt = Date.now();
-    const checkAt = createdAt + POINT_TIMEOUT;
+    const checkAt = createdAt + POINT_TIMEOUTS[status];
 
     const {
       latitude,
@@ -320,7 +329,7 @@ apiServer.post(
         votes,
         votedAt: now,
         status: PointStatus.voted,
-        checkAt: now + POINT_TIMEOUT,
+        checkAt: now + POINT_TIMEOUTS[PointStatus.voted],
       },
     });
 
@@ -339,7 +348,6 @@ function delay(ms = 1000) {
 async function startPointsChecker() {
   while (true) {
     const now = Date.now();
-    const checkAt = now + POINT_TIMEOUT;
 
     const pointsToCheck = await db.points
       .find({
@@ -357,15 +365,15 @@ async function startPointsChecker() {
       if ([PointStatus.created, PointStatus.voted].includes(status)) {
         return point.update({
           $set: {
-            checkAt,
             status: PointStatus.unvotedWeak,
+            checkAt: now + POINT_TIMEOUTS[PointStatus.unvotedWeak],
           },
         });
       } else if (status === PointStatus.unvotedWeak) {
         return point.update({
           $set: {
-            checkAt,
             status: PointStatus.unvotedStrong,
+            checkAt: now + POINT_TIMEOUTS[PointStatus.unvotedStrong],
           },
         });
       } else {
@@ -375,7 +383,7 @@ async function startPointsChecker() {
 
     await Promise.all(updates);
 
-    await delay(CHECK_POINT_TIMEOUT);
+    await delay(CHECK_POINTS_INTERVAL);
   }
 }
 
