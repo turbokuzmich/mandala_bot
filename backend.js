@@ -166,6 +166,9 @@ await db.addCollections({
         description: {
           type: "string",
         },
+        medical: {
+          type: "boolean",
+        },
         votes: {
           type: "array",
           items: {

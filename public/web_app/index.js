@@ -8,12 +8,25 @@ const userInfo = document.querySelector(".js-user-info");
 const actionsPane = document.querySelector(".js-pane-actions");
 const viewPane = document.querySelector(".js-pane-view");
 const pointInfo = document.querySelector(".js-point-info");
+const pointMedical = document.querySelector(".js-point-medical");
 const pointDescription = document.querySelector(".js-point-description");
 const appendButton = document.querySelector(".js-button-append");
 const cancelButton = document.querySelector(".js-button-cancel");
 const voteButton = document.querySelector(".js-button-vote");
 const voteCancelButton = document.querySelector(".js-button-cancel-vote");
 const refreshButton = document.querySelector(".js-refresh");
+
+const getRelativeTimeFormatter = (function () {
+  let formatter = null;
+
+  return function () {
+    if (formatter === null) {
+      formatter = new TimeAgo();
+    }
+
+    return formatter;
+  };
+})();
 
 const api = axios.create({
   baseURL: "https://m.deluxspa.ru/api",
@@ -202,7 +215,11 @@ const pointAppended$ = user$.pipe(
                       latitude: coords[0],
                       longitude: coords[1],
                       description: pointDescription.value.trim(),
-                    })
+                      medical: pointMedical.checked,
+                    }).pipe(
+                      rxjs.map(() => ({ success: true })),
+                      rxjs.catchError(() => rxjs.of({ success: false }))
+                    )
                   : rxjs.EMPTY
               ),
               rxjs.switchAll()
@@ -225,7 +242,10 @@ const pointVoted$ = user$.pipe(
             post$("/map/points/vote", {
               id: placemark.options.get("botPoint").id,
               user: username,
-            })
+            }).pipe(
+              rxjs.map(() => ({ success: true })),
+              rxjs.catchError(() => rxjs.of({ success: false }))
+            )
           ),
           rxjs.switchAll()
         )
@@ -237,14 +257,16 @@ const pointVoted$ = user$.pipe(
   rxjs.share()
 );
 
-const fetchedPoints$ = rxjs
-  .merge(
-    pointAppended$,
-    rxjs
-      .merge(ymaps$, refreshClicks$)
-      .pipe(rxjs.mergeMap(() => get$("/map/points")))
-  )
-  .pipe(rxjs.map(({ points }) => ({ action: "list", points })));
+const fetchInterval = rxjs.interval(1 * 60 * 1000);
+
+const fetchedPoints$ = rxjs.merge(ymaps$, refreshClicks$, fetchInterval).pipe(
+  rxjs.map(() =>
+    get$("/map/points").pipe(rxjs.catchError(() => rxjs.of({ points: [] })))
+  ),
+  rxjs.switchAll(),
+  rxjs.map(({ points }) => ({ action: "list", points })),
+  rxjs.shareReplay(1)
+);
 
 const points$ = rxjs.merge(fetchedPoints$, socketMessage$).pipe(
   rxjs.scan((points, event) => {
@@ -274,25 +296,35 @@ function renderPointBallonBody(point) {
   const parts = [];
 
   parts.push(
-    `<p>Добавил ${point.createdBy} ${moment(point.createdAt).format("H:mm:ss")}`
+    `<p>Создана ${getRelativeTimeFormatter().format(point.createdAt)} (${moment(
+      point.createdAt
+    ).format("HH:mm:ss D.MM.YYYY")})<br />Добавил ${point.createdBy}`
   );
+
+  if (point.medical) {
+    parts.push("<p><b>Работает медслужба</b></p>");
+  }
 
   if (point.description) {
     parts.push(`<p><b>Комментарий</b>:<br />${point.description}</p>`);
   }
 
   if (point.status === "created") {
-    parts.push("<p>Точка еще никем не подтверждена</p>");
+    parts.push("<p>Подтверждений пока нет</p>");
   } else if (point.status === "voted") {
     parts.push(
-      `<p>Точка последний раз подтверждена ${moment(point.votedAt).format(
-        "H:mm:ss"
-      )}`
+      `<p>Подтверждена ${getRelativeTimeFormatter().format(
+        point.votedAt
+      )} (${moment(point.votedAt).format("H:mm:ss D.MM.YYYY")})</p>`
     );
-  } else if (point.status === "unvoted-weak") {
-    parts.push("Точка давно никем не подтверждалась");
   } else {
-    parts.push("Точка очень давно никем не подтверждалась");
+    parts.push(
+      point.votedAt
+        ? `<p>Последнее подтверждение ${getRelativeTimeFormatter().format(
+            point.votedAt
+          )} (${moment(point.votedAt).format("H:mm:ss D.MM.YYYY")})</p>`
+        : "<p>Подтверждений нет</p>"
+    );
   }
 
   if (point.votes.length) {
@@ -360,8 +392,9 @@ const alerts$ = rxjs
       rxjs.catchError(() => rxjs.of("Не удалось создать точку"))
     ),
     pointVoted$.pipe(
-      rxjs.map(() => "Подтверждение получено"),
-      rxjs.catchError(() => rxjs.of("Не удалось подтвердить"))
+      rxjs.map(({ success }) =>
+        success ? "Подтверждение получено" : "Не удалось подтвердить"
+      )
     )
   )
   .pipe(rxjs.share());
@@ -385,13 +418,8 @@ map$
   .pipe(
     rxjs.map((map) =>
       rxjs
-        .of(
-          cancelClicks$.pipe(rxjs.map(() => map)),
-          voteCancelClicks$.pipe(rxjs.map(() => map)),
-          pointAppended$.pipe(rxjs.map(() => map)),
-          pointVoted$.pipe(rxjs.map(() => map))
-        )
-        .pipe(rxjs.mergeAll())
+        .merge(cancelClicks$, voteCancelClicks$, pointAppended$, pointVoted$)
+        .pipe(rxjs.map(() => map))
     ),
     rxjs.switchAll()
   )

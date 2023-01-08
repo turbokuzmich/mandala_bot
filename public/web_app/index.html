@@ -109,6 +109,16 @@
         <div class="point-info">
           <h4>Добавление точки</h4>
           <p>Координаты: <span class="js-point-info"></span></p>
+          <div class="form-group form-check">
+            <input
+              type="checkbox"
+              class="form-check-input js-point-medical"
+              id="pointMedical"
+            />
+            <label class="form-check-label" for="pointMedical"
+              >Работает медслужба</label
+            >
+          </div>
           <div class="form-group">
             <label for="pointDescription">Ваш комментарий</label>
             <textarea
@@ -126,11 +136,11 @@
         </div>
       </div>
     </div>
-    <script src="/web_app/index.js?t=13"></script>
     <script type="module">
-      import ru from 'https://unpkg.com/javascript-time-ago@2.x/locale/ru.json.js';
+      import ru from "https://unpkg.com/javascript-time-ago@2.x/locale/ru.json.js";
 
       TimeAgo.addDefaultLocale(ru);
     </script>
+    <script src="/web_app/index.js?t=13"></script>
   </body>
 </html>
