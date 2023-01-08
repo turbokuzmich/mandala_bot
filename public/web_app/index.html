@@ -83,6 +83,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/ru.min.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=cd000b7d-9831-4a12-8fcc-4d94421d4585&lang=ru_RU"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://unpkg.com/javascript-time-ago@2.5.9/bundle/javascript-time-ago.js"></script>
   </head>
   <body>
     <div class="wrapper">
@@ -125,6 +126,11 @@
         </div>
       </div>
     </div>
-    <script src="/web_app/index.js?t=11"></script>
+    <script src="/web_app/index.js?t=13"></script>
+    <script type="module">
+      import ru from 'https://unpkg.com/javascript-time-ago@2.x/locale/ru.json.js';
+
+      TimeAgo.addDefaultLocale(ru);
+    </script>
   </body>
 </html>
