@@ -400,18 +400,52 @@ function setupWebsocket() {
     )
   );
 
-  connection$.subscribe(({ client }) => {
-    console.log("connected: ", client.id);
+  const sockets$ = rxjs
+    .merge(
+      connection$.pipe(rxjs.map((data) => ({ type: "connect", data }))),
+      disconnect$.pipe(rxjs.map((client) => ({ type: "disconnect", client })))
+    )
+    .pipe(
+      rxjs.scan((sockets, event) => {
+        if (event.type === "connect") {
+          sockets.set(event.data.client.id, event.data);
+        }
+        if (event.type === "disconnect") {
+          sockets.delete(event.client.id);
+        }
+
+        return sockets;
+      }, new Map()),
+      rxjs.shareReplay(1)
+    );
+
+  sockets$.subscribe((sockets) => {
+    console.log("sockets:", sockets.size);
   });
 
-  disconnect$.subscribe((client) => {
-    console.log("disconnected: ", client.id);
+  db.points.$.pipe(
+    rxjs.map((event) => sockets$.pipe(rxjs.map((sockets) => [event, sockets]))),
+    rxjs.switchAll()
+  ).subscribe(([event, sockets]) => {
+    for (const [_, { client }] of sockets) {
+      const document = Object.keys(event.documentData)
+        .filter((key) => !key.startsWith("_"))
+        .reduce(
+          (document, key) => ({
+            ...document,
+            [key]: event.documentData[key],
+          }),
+          {}
+        );
+
+      client.emit(`point:${event.operation.toLowerCase()}`, document);
+    }
   });
 }
 
 async function main() {
   try {
-    apiServer.listen({ port: process.env.BACKEND_PORT });
+    await apiServer.listen({ port: process.env.BACKEND_PORT });
     startPointsChecker();
     setupWebsocket();
   } catch (error) {
