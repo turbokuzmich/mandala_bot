@@ -362,7 +362,7 @@ async function startPointsChecker() {
             checkedAt: now,
           },
         });
-      } else if (point.status === pointstatus.unvotedweak) {
+      } else if (status === PointStatus.unvotedWeak) {
         return point.update({
           $set: {
             status: PointStatus.unvotedStrong,
