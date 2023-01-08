@@ -295,7 +295,7 @@ function renderPointBallonBody(point) {
 function getPointPlacemarkColor(point) {
   return {
     created: "rgb(60, 170, 60)",
-    votes: "red",
+    voted: "red",
     "unvoted-weak": "rgba(60, 170, 60, 0.7)",
     "unvoted-strong": "rgba(60, 170, 60, 0.4)",
   }[point.status];
