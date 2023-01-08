@@ -298,7 +298,7 @@ function renderPointBallonBody(point) {
   parts.push(
     `<p>Создана ${getRelativeTimeFormatter().format(point.createdAt)} (${moment(
       point.createdAt
-    ).format("HH:mm:ss D.MM.YYYY")})<br />Добавил ${point.createdBy}`
+    ).format("HH:mm DD.MM.YYYY")})<br />Добавил ${point.createdBy}`
   );
 
   if (point.medical) {
@@ -315,14 +315,14 @@ function renderPointBallonBody(point) {
     parts.push(
       `<p>Подтверждена ${getRelativeTimeFormatter().format(
         point.votedAt
-      )} (${moment(point.votedAt).format("H:mm:ss D.MM.YYYY")})</p>`
+      )} (${moment(point.votedAt).format("HH:mm DD.MM.YYYY")})</p>`
     );
   } else {
     parts.push(
       point.votedAt
         ? `<p>Последнее подтверждение ${getRelativeTimeFormatter().format(
             point.votedAt
-          )} (${moment(point.votedAt).format("H:mm:ss D.MM.YYYY")})</p>`
+          )} (${moment(point.votedAt).format("HH:mm DD.MM.YYYY")})</p>`
         : "<p>Подтверждений нет</p>"
     );
   }
@@ -332,7 +332,7 @@ function renderPointBallonBody(point) {
       .reverse()
       .map(
         ({ createdAt, createdBy }) =>
-          `${moment(createdAt).format("H:mm:ss")} подтвердил ${createdBy}`
+          `${moment(createdAt).format("HH:mm")} подтвердил ${createdBy}`
       )
       .join("<br />");
 
