@@ -1,17 +1,17 @@
-import { createRxDatabase } from "rxdb";
+import { createRxDatabase, addRxPlugin } from "rxdb";
+import { RxDBUpdatePlugin } from "rxdb/plugins/update";
 import { getRxStorageMemory } from "rxdb/plugins/memory";
 import { config } from "dotenv";
 import { v4 as uuid } from "uuid";
 import ipc from "node-ipc";
 import * as rxjs from "rxjs";
-import get from "lodash/get.js";
-import property from "lodash/property.js";
 import fasify from "fastify";
 import { ipcId, ipcMessageName } from "./constants.js";
 
 const CHECK_POINT_TIMEOUT = 1 * 60 * 1000; // 1 minute
 const POINT_ALIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 
+addRxPlugin(RxDBUpdatePlugin);
 config();
 
 function connectToIPC(ipc, to) {
@@ -117,7 +117,6 @@ const PointStatus = {
  * @property {number} [checkedAt]
  */
 
-const points = new Map();
 const db = await createRxDatabase({
   name: "dps",
   storage: getRxStorageMemory(),
