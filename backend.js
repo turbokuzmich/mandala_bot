@@ -9,8 +9,8 @@ import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
 import { ipcId, ipcMessageName } from "./constants.js";
 
-const CHECK_POINT_TIMEOUT = 1 * 60 * 1000; // 1 minute
-const POINT_ALIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes
+const CHECK_POINT_TIMEOUT = 10 * 1000; // 10 seconds
+const POINT_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 
 addRxPlugin(RxDBUpdatePlugin);
 config();
@@ -109,12 +109,12 @@ const PointStatus = {
  * @property {PointStatus} status
  * @property {string} createdBy
  * @property {number} createdAt
+ * @property {number} checkAt
  * @property {number} latitude
  * @property {number} longitude
  * @property {string} [description]
  * @property {Array.<PointVote>} votes
  * @property {number} [votedAt]
- * @property {number} [checkedAt]
  */
 
 const db = await createRxDatabase({
@@ -145,6 +145,9 @@ await db.addCollections({
         createdAt: {
           type: "integer",
         },
+        checkAt: {
+          type: "integer",
+        },
         latitude: {
           type: "number",
         },
@@ -172,15 +175,13 @@ await db.addCollections({
         votedAt: {
           type: "integer",
         },
-        checkedAt: {
-          type: "integer",
-        },
       },
       required: [
         "id",
         "status",
         "createdBy",
         "createdAt",
+        "checkAt",
         "latitude",
         "longitude",
         "votes",
@@ -241,6 +242,7 @@ apiServer.post(
     const id = uuid();
     const status = PointStatus.created;
     const createdAt = Date.now();
+    const checkAt = createdAt + POINT_TIMEOUT;
 
     const {
       latitude,
@@ -252,6 +254,7 @@ apiServer.post(
     await db.points.upsert({
       id,
       status,
+      checkAt,
       createdBy,
       createdAt,
       latitude,
@@ -315,8 +318,9 @@ apiServer.post(
     await point.update({
       $set: {
         votes,
-        status: PointStatus.voted,
         votedAt: now,
+        status: PointStatus.voted,
+        checkAt: now + POINT_TIMEOUT,
       },
     });
 
@@ -335,19 +339,14 @@ function delay(ms = 1000) {
 async function startPointsChecker() {
   while (true) {
     const now = Date.now();
+    const checkAt = now + POINT_TIMEOUT;
 
     const pointsToCheck = await db.points
       .find({
         selector: {
-          $or: [
-            {
-              checkedAt: { $exists: false },
-              createdAt: { $lt: now - POINT_ALIVE_TIMEOUT },
-            },
-            {
-              checkedAt: { $lt: now - POINT_ALIVE_TIMEOUT },
-            },
-          ],
+          checkAt: {
+            $lte: now,
+          },
         },
       })
       .exec();
@@ -358,15 +357,15 @@ async function startPointsChecker() {
       if ([PointStatus.created, PointStatus.voted].includes(status)) {
         return point.update({
           $set: {
+            checkAt,
             status: PointStatus.unvotedWeak,
-            checkedAt: now,
           },
         });
       } else if (status === PointStatus.unvotedWeak) {
         return point.update({
           $set: {
+            checkAt,
             status: PointStatus.unvotedStrong,
-            checkedAt: now,
           },
         });
       } else {
