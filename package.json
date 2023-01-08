@@ -16,6 +16,7 @@
     "color": "^4.2.3",
     "dotenv": "^16.0.3",
     "fastify": "^4.10.2",
+    "fastify-socket.io": "^4.0.0",
     "lodash": "^4.17.21",
     "node-ipc": "^11.1.0",
     "node-telegram-bot-api": "^0.60.0",

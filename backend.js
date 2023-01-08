@@ -6,7 +6,7 @@ import { v4 as uuid } from "uuid";
 import ipc from "node-ipc";
 import * as rxjs from "rxjs";
 import fasify from "fastify";
-import io from "socket.io";
+import fastifyIo from "fastify-socket.io";
 import { ipcId, ipcMessageName } from "./constants.js";
 
 const CHECK_POINT_TIMEOUT = 1 * 60 * 1000; // 1 minute
@@ -191,6 +191,8 @@ await db.addCollections({
 });
 
 const apiServer = fasify();
+
+apiServer.register(fastifyIo);
 
 apiServer.get("/api/map/points", async function () {
   const points = await db.points.find().exec();
@@ -382,7 +384,7 @@ async function startPointsChecker() {
 }
 
 function setupWebsocket() {
-  const io$ = io(apiServer);
+  const io$ = rxjs.of(apiServer.io);
 
   const connection$ = io$.pipe(
     rxjs.switchMap((io) =>
