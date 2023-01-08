@@ -57,7 +57,7 @@ function getUsernameByChatId(id, timeout = 2000) {
         }
 
         function onMessage({ request_id, error, username }) {
-          console.log(request_id, error, username)
+          console.log(request_id, error, username);
           if (request_id === requestId) {
             clearTimeout(timeoutHandler);
             ipc.of[ipcId].off(ipcMessageName, onMessage);
@@ -337,26 +337,45 @@ async function startPointsChecker() {
   while (true) {
     const now = Date.now();
 
-    const ids = [...points.values()]
-      .filter(
-        (point) =>
-          now - get(point, "checkedAt", point.createdAt) > POINT_ALIVE_TIMEOUT
-      )
-      .map(property("id"));
+    const pointsToCheck = await db.points
+      .find({
+        selector: {
+          $or: [
+            {
+              checkedAt: { $exists: false },
+              createdAt: { $gt: now - POINT_ALIVE_TIMEOUT },
+            },
+            {
+              checkedAt: { $gt: now - POINT_ALIVE_TIMEOUT },
+            },
+          ],
+        },
+      })
+      .exec();
 
-    ids.forEach((id) => {
-      const point = points.get(id);
+    const updates = pointsToCheck.map((point) => {
+      const status = point.get("status");
 
-      if ([PointStatus.created, PointStatus.voted].includes(point.status)) {
-        point.status = PointStatus.unvotedWeak;
-        point.checkedAt = now;
-      } else if (point.status === PointStatus.unvotedWeak) {
-        point.status = PointStatus.unvotedStrong;
-        point.checkedAt = now;
+      if ([PointStatus.created, PointStatus.voted].includes(status)) {
+        return point.update({
+          $set: {
+            status: PointStatus.unvotedWeak,
+            checkedAt: now,
+          },
+        });
+      } else if (point.status === pointstatus.unvotedweak) {
+        return point.update({
+          $set: {
+            status: PointStatus.unvotedStrong,
+            checkedAt: now,
+          },
+        });
       } else {
-        points.delete(id);
+        return point.remove();
       }
     });
+
+    await Promise.all(updates);
 
     await delay(CHECK_POINT_TIMEOUT);
   }
@@ -365,7 +384,7 @@ async function startPointsChecker() {
 async function main() {
   try {
     apiServer.listen({ port: process.env.BACKEND_PORT });
-    // startPointsChecker();
+    startPointsChecker();
   } catch (error) {
     console.log("failed to listen", error, process.env.BACKEND_PORT);
   }
