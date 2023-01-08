@@ -6,6 +6,7 @@ import { v4 as uuid } from "uuid";
 import ipc from "node-ipc";
 import * as rxjs from "rxjs";
 import fasify from "fastify";
+import io from "socket.io";
 import { ipcId, ipcMessageName } from "./constants.js";
 
 const CHECK_POINT_TIMEOUT = 1 * 60 * 1000; // 1 minute
@@ -380,10 +381,37 @@ async function startPointsChecker() {
   }
 }
 
+function setupWebsocket() {
+  const io$ = io(apiServer);
+
+  const connection$ = io$.pipe(
+    rxjs.switchMap((io) =>
+      rxjs
+        .fromEvent(io, "connection")
+        .pipe(rxjs.map((client) => ({ io, client })))
+    )
+  );
+
+  const disconnect$ = connection$.pipe(
+    rxjs.mergeMap(({ client }) =>
+      rxjs.fromEvent(client, "disconnect").pipe(rxjs.map(() => client))
+    )
+  );
+
+  connection$.subscribe(({ client }) => {
+    console.log("connected: ", client.id);
+  });
+
+  disconnect$.subscribe((client) => {
+    console.log("disconnected: ", client.id);
+  });
+}
+
 async function main() {
   try {
     apiServer.listen({ port: process.env.BACKEND_PORT });
     startPointsChecker();
+    setupWebsocket();
   } catch (error) {
     console.log("failed to listen", error, process.env.BACKEND_PORT);
   }
