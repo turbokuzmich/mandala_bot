@@ -3,7 +3,7 @@ Telegram.WebApp.expand();
 
 moment.locale("ru");
 
-const mapContainer = document.getElementById('map');
+const mapContainer = document.querySelector(".js-map");
 const userInfo = document.querySelector(".js-user-info");
 const actionsPane = document.querySelector(".js-pane-actions");
 const viewPane = document.querySelector(".js-pane-view");
@@ -468,4 +468,3 @@ alerts$.subscribe((alert) => {
     console.log("Unable to show telegram alert dialog");
   }
 });
-
