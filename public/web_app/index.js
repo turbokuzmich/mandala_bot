@@ -3,6 +3,7 @@ Telegram.WebApp.expand();
 
 moment.locale("ru");
 
+const mapContainer = document.getElementById('map');
 const userInfo = document.querySelector(".js-user-info");
 const actionsPane = document.querySelector(".js-pane-actions");
 const viewPane = document.querySelector(".js-pane-view");
@@ -87,6 +88,23 @@ const map$ = ymaps$.pipe(
       })
   ),
   rxjs.shareReplay(1)
+);
+
+const geolocation$ = rxjs.combineLatest([ymaps$, map$]).pipe(
+  rxjs.take(1),
+  rxjs.map(([ymaps, map]) =>
+    rxjs
+      .from(ymaps.geolocation.get())
+      .pipe(rxjs.map((response) => [ymaps, map, response]))
+  ),
+  rxjs.switchAll(),
+  rxjs.map(([ymaps, map, response]) => [
+    map,
+    ymaps.util.bounds.getCenterAndZoom(
+      response.geoObjects.get(0).properties.get("boundedBy"),
+      [mapContainer.offsetWidth, mapContainer.offsetHeight]
+    ),
+  ])
 );
 
 const mapClicks$ = map$.pipe(
@@ -301,30 +319,28 @@ function getPointPlacemarkColor(point) {
   }[point.status];
 }
 
-const placemarks$ = rxjs
-  .combineLatest([points$, ymaps$])
-  .pipe(
-    rxjs.map(([points, ymaps]) =>
-      points.map(
-        (point) =>
-          new ymaps.Placemark(
-            [point.latitude, point.longitude],
-            {
-              balloonContentHeader: `${point.latitude.toPrecision(
-                6
-              )}, ${point.longitude.toPrecision(6)}`,
-              balloonContentBody: renderPointBallonBody(point),
-            },
-            {
-              preset: "islands#circleIcon",
-              iconColor: getPointPlacemarkColor(point),
-              botPoint: point,
-            }
-          )
-      )
-    ),
-    rxjs.shareReplay(1)
-  );
+const placemarks$ = rxjs.combineLatest([points$, ymaps$]).pipe(
+  rxjs.map(([points, ymaps]) =>
+    points.map(
+      (point) =>
+        new ymaps.Placemark(
+          [point.latitude, point.longitude],
+          {
+            balloonContentHeader: `${point.latitude.toPrecision(
+              6
+            )}, ${point.longitude.toPrecision(6)}`,
+            balloonContentBody: renderPointBallonBody(point),
+          },
+          {
+            preset: "islands#circleIcon",
+            iconColor: getPointPlacemarkColor(point),
+            botPoint: point,
+          }
+        )
+    )
+  ),
+  rxjs.shareReplay(1)
+);
 
 const selectedPoint$ = placemarks$.pipe(
   rxjs.map((placemarks) => rxjs.from(placemarks)),
@@ -440,6 +456,11 @@ rxjs
     }
   });
 
+geolocation$.subscribe(([map, { center, zoom }]) => {
+  map.setZoom(zoom);
+  map.setCenter(center);
+});
+
 alerts$.subscribe((alert) => {
   try {
     Telegram.WebApp.showAlert(alert);
@@ -447,3 +468,4 @@ alerts$.subscribe((alert) => {
     console.log("Unable to show telegram alert dialog");
   }
 });
+
