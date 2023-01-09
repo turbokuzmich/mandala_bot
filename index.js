@@ -44,11 +44,15 @@ class ApiChannel {
     this.messageId = messageId;
   }
 
-  async sendChat(chatId, requestId) {
+  async sendUser(chatId, requestId) {
     try {
-      this._respond({ requestId, chat: await bot.getChat(chatId) });
+      const {
+        user: { id, first_name, last_name },
+      } = await bot.getChatMember(chatId, chatId);
+
+      this._respond({ requestId, user: { id, first_name, last_name } });
     } catch (error) {
-      this._respond({ requestId, error: "Failed to fetch chat" });
+      this._respond({ requestId, error: "Failed to fetch user by chat id" });
     }
   }
 
@@ -101,8 +105,8 @@ class ApiChannel {
       });
       this.ipc.server.on(this.messageId, async (message) => {
         switch (message.method) {
-          case "getChatById":
-            await this.sendChat(message.chatId, message.requestId);
+          case "getUserByChatId":
+            await this.sendUser(message.chatId, message.requestId);
             break;
           case "notifyNearby": {
             await this.notifyListenersOfNewNearbyPoint(
@@ -636,6 +640,9 @@ bot.onText(commandRegExps.mandala, async function (message) {
 bot.onText(commandRegExps.map, async function (message) {
   const {
     message_id,
+    from: {
+      // id, first_name, last_name, username
+    },
     chat: { id },
   } = message;
 
@@ -707,7 +714,12 @@ bot.on("message", async function (message) {
     web_app_data,
     location,
   } = message;
+  // 177074269
   // console.log(message);
+
+  const chat = await bot.getChat(177074269);
+  console.log(chat);
+  console.log(id);
 
   if (mandalaRequests.has(id)) {
     runCalculation(id, message_id, text);

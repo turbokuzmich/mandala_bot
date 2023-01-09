@@ -185,8 +185,10 @@ const user$ = ymaps$.pipe(
         chat_id: chatId,
       },
     }).pipe(
-      rxjs.map(({ username }) => ({ isAuthorized: true, username })),
-      rxjs.catchError(() => rxjs.of({ isAuthorized: false, username: "guest" }))
+      rxjs.map((user) => ({ ...user, isAuthorized: true })),
+      rxjs.catchError(() =>
+        rxjs.of({ isAuthorized: false, id: 0, first_name: "Гость" })
+      )
     )
   ),
   rxjs.shareReplay(1)
@@ -203,7 +205,7 @@ const socketMessage$ = user$.pipe(
 );
 
 const pointAppended$ = user$.pipe(
-  rxjs.map(({ username }) =>
+  rxjs.map(({ id, first_name, last_name }) =>
     newPointCoords$.pipe(
       rxjs.map((coords) =>
         coords
@@ -211,7 +213,7 @@ const pointAppended$ = user$.pipe(
               rxjs.map(() =>
                 coords
                   ? post$("/map/points", {
-                      user: username,
+                      user: { id, first_name, last_name },
                       latitude: coords[0],
                       longitude: coords[1],
                       description: pointDescription.value.trim(),
@@ -234,14 +236,14 @@ const pointAppended$ = user$.pipe(
 );
 
 const pointVoted$ = user$.pipe(
-  rxjs.map(({ username }) =>
+  rxjs.map(({ id, first_name, last_name }) =>
     selectedPoint$.pipe(
       rxjs.map((placemark) =>
         voteClicks$.pipe(
           rxjs.map(() =>
             post$("/map/points/vote", {
               id: placemark.options.get("botPoint").id,
-              user: username,
+              user: { id, first_name, last_name },
             }).pipe(
               rxjs.map(() => ({ success: true })),
               rxjs.catchError(() => rxjs.of({ success: false }))
@@ -298,7 +300,12 @@ function renderPointBallonBody(point) {
   parts.push(
     `<p>Замечен ${getRelativeTimeFormatter().format(point.createdAt)} (${moment(
       point.createdAt
-    ).format("HH:mm DD.MM.YYYY")})<br />Добавил ${point.createdBy}`
+    ).format("HH:mm DD.MM.YYYY")})<br />Добавил ${[
+      point.createdBy.first_name,
+      point.createdBy.last_name,
+    ]
+      .filter(Boolean)
+      .join(" ")}`
   );
 
   if (point.medical) {
@@ -332,7 +339,12 @@ function renderPointBallonBody(point) {
       .reverse()
       .map(
         ({ createdAt, createdBy }) =>
-          `${moment(createdAt).format("HH:mm")} подтвердил ${createdBy}`
+          `${moment(createdAt).format("HH:mm")} подтвердил ${[
+            createdBy.first_name,
+            createdBy.last_name,
+          ]
+            .filter(Boolean)
+            .join(" ")}`
       )
       .join("<br />");
 
@@ -392,8 +404,10 @@ const alerts$ = rxjs
   )
   .pipe(rxjs.share());
 
-user$.subscribe(function ({ isAuthorized, username }) {
-  userInfo.innerHTML = isAuthorized ? `Пользователь: ${username}` : "Гость";
+user$.subscribe(function ({ isAuthorized, first_name, last_name }) {
+  userInfo.innerHTML = isAuthorized
+    ? [first_name, last_name].filter(Boolean).join(" ")
+    : "Гость";
 });
 
 newPointCoords$.subscribe(function (coords) {

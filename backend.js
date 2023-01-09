@@ -56,7 +56,7 @@ const IPCClient$ = rxjs.of(ipc).pipe(
   rxjs.shareReplay(1)
 );
 
-function getUsernameByChatId(id, timeout = ipcResponseTimeout) {
+function getUserByChatId(id, timeout = ipcResponseTimeout) {
   return IPCClient$.pipe(
     rxjs.map((socket) => {
       return new rxjs.Observable((subscriber) => {
@@ -69,7 +69,7 @@ function getUsernameByChatId(id, timeout = ipcResponseTimeout) {
           subscriber.error("request timed out");
         }
 
-        function onMessage({ requestId, error, chat: { username } }) {
+        function onMessage({ requestId, error, user }) {
           if (requestId === chatRequestId) {
             clearTimeout(timeoutHandler);
             socket.off(ipcMessageName, onMessage);
@@ -77,7 +77,7 @@ function getUsernameByChatId(id, timeout = ipcResponseTimeout) {
             if (error) {
               subscriber.error(error);
             } else {
-              subscriber.next(username);
+              subscriber.next(user);
               subscriber.complete();
             }
           }
@@ -87,7 +87,7 @@ function getUsernameByChatId(id, timeout = ipcResponseTimeout) {
 
         socket.emit(ipcMessageName, {
           chatId: id,
-          method: "getChatById",
+          method: "getUserByChatId",
           requestId: chatRequestId,
         });
 
@@ -100,24 +100,6 @@ function getUsernameByChatId(id, timeout = ipcResponseTimeout) {
     rxjs.mergeAll()
   );
 }
-
-/**
- * @typedef {Object} PointVote
- * @property {number} createdAt
- * @property {string} createdby
- *
- * @typedef {Object} Point
- * @property {string} id
- * @property {PointStatus} status
- * @property {string} createdBy
- * @property {number} createdAt
- * @property {number} checkAt
- * @property {number} latitude
- * @property {number} longitude
- * @property {string} [description]
- * @property {Array.<PointVote>} votes
- * @property {number} [votedAt]
- */
 
 const db = await createRxDatabase({
   name: "dps",
@@ -142,7 +124,19 @@ await db.addCollections({
           enum: Object.values(PointStatus),
         },
         createdBy: {
-          type: "string",
+          type: "object",
+          properties: {
+            id: {
+              type: "integer",
+            },
+            first_name: {
+              type: "string",
+            },
+            last_name: {
+              type: "string",
+            },
+          },
+          required: ["id", "first_name"],
         },
         createdAt: {
           type: "integer",
@@ -172,7 +166,19 @@ await db.addCollections({
                 type: "integer",
               },
               createdBy: {
-                type: "string",
+                type: "object",
+                properties: {
+                  id: {
+                    type: "integer",
+                  },
+                  first_name: {
+                    type: "string",
+                  },
+                  last_name: {
+                    type: "string",
+                  },
+                },
+                required: ["id", "first_name"],
               },
             },
           },
@@ -193,6 +199,25 @@ await db.addCollections({
       ],
     },
   },
+  settings: {
+    schema: {
+      title: "User settings",
+      version: 0,
+      primaryKey: "chatId",
+      type: "object",
+      properties: {
+        chatId: {
+          type: "integer",
+        },
+        alias: {
+          type: "string",
+        },
+        distance: {
+          type: "integer",
+        },
+      },
+    },
+  },
 });
 
 const apiServer = fasify();
@@ -205,7 +230,7 @@ apiServer.get("/api/map/points", async function () {
   return { status: "success", points: points.map((point) => point.toJSON()) };
 });
 
-const usernameRequestSchema = {
+const userRequestSchema = {
   type: "object",
   required: ["chat_id"],
   properties: {
@@ -215,16 +240,16 @@ const usernameRequestSchema = {
 
 apiServer.get(
   "/api/me",
-  { schema: { query: usernameRequestSchema } },
+  { schema: { query: userRequestSchema } },
   function (request, reply) {
-    getUsernameByChatId(request.query.chat_id).subscribe({
-      next(username) {
-        reply.code(200).send({ status: "success", username });
+    getUserByChatId(request.query.chat_id).subscribe({
+      next(user) {
+        reply.code(200).send({ status: "success", user });
       },
       error() {
         reply
           .code(200)
-          .send({ status: "error", message: "Failed to fetch username" });
+          .send({ status: "error", message: "Failed to fetch user" });
       },
     });
   }
@@ -234,7 +259,21 @@ const pointCreateSchema = {
   type: "object",
   required: ["latitude", "longitude", "user"],
   properties: {
-    user: { type: "string" },
+    user: {
+      type: "object",
+      properties: {
+        id: {
+          type: "integer",
+        },
+        first_name: {
+          type: "string",
+        },
+        last_name: {
+          type: "string",
+        },
+      },
+      required: ["id", "first_name"],
+    },
     latitude: { type: "number" },
     longitude: { type: "number" },
   },
@@ -285,7 +324,21 @@ const pointVoteSchema = {
   required: ["id", "user"],
   properties: {
     id: { type: "string" },
-    user: { type: "string" },
+    user: {
+      type: "object",
+      properties: {
+        id: {
+          type: "integer",
+        },
+        first_name: {
+          type: "string",
+        },
+        last_name: {
+          type: "string",
+        },
+      },
+      required: ["id", "first_name"],
+    },
   },
 };
 
@@ -303,7 +356,7 @@ apiServer.post(
         .send({ status: "error", message: "point not found" });
     }
 
-    if (point.get("createdBy") === user) {
+    if (point.get("createdBy").id === user.id) {
       return reply.code(403).send({
         status: "error",
         message: "you are not allowed to vote for your point",
@@ -312,7 +365,7 @@ apiServer.post(
 
     const votes = point.get("votes").map((vote) => vote.toJSON());
 
-    if (votes.find(({ createdBy }) => createdBy === user)) {
+    if (votes.find(({ createdBy }) => createdBy.id === user.id)) {
       return reply
         .code(403)
         .send({ status: "error", message: "you already voted for this point" });
