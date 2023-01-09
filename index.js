@@ -390,12 +390,18 @@ async function showPointDetails(pointId, chatId, messageId) {
           )}.`
         : "Подтверждений не было.",
       point.votedAt
-        ? `Последнее подтверждение ${relativeTime.format(point.votedAt)}).`
+        ? `Последнее подтверждение ${relativeTime.format(point.votedAt)}.`
         : null,
       point.medical ? "Работает медслужба" : null,
       point.description ? "\n" : null,
       point.description ? `*От ${author}:*` : null,
       point.description ? point.description : null,
+      "\n",
+      "`" +
+        point.latitude.toPrecision(6) +
+        "," +
+        point.longitude.toPrecision(6) +
+        "`",
     ]
       .filter(Boolean)
       .join("\n"),
