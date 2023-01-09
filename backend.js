@@ -526,7 +526,6 @@ function setupApiChannel() {
     .pipe(
       rxjs.scan(
         (state, action) => {
-          //console.log('scan', state, action)
           if (action.type === "socket") {
             return {
               ...state,
