@@ -238,7 +238,7 @@ const settingsUpdated$ = chatId$.pipe(
       rxjs.catchError(() => rxjs.of({ distance }))
     )
   ),
-  rxjs.replay()
+  rxjs.share()
 );
 
 const socketMessage$ = user$.pipe(

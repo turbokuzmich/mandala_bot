@@ -69,12 +69,12 @@ class ApiChannel {
     );
   }
 
-  getNearbyPoints(latitude, longitude, distance, id) {
+  getNearbyPoints(latitude, longitude, chat, messageId) {
     return this._request("getNearbyPoints", {
+      id: messageId,
       latitude,
       longitude,
-      distance,
-      id,
+      chat,
     });
   }
 
@@ -477,13 +477,7 @@ async function updateListenerLocation({
       id,
       latitude,
       longitude,
-      await apiChannel.getNearbyPoints(
-        latitude,
-        longitude,
-        // FIXME это убрать в настройки
-        watchDistance,
-        message_id
-      ),
+      await apiChannel.getNearbyPoints(latitude, longitude, id, message_id),
       false
     );
   } catch (error) {
@@ -501,8 +495,7 @@ async function sendNearbyPoints(message) {
     const nearbyPoints = await apiChannel.getNearbyPoints(
       latitude,
       longitude,
-      // FIXME это убрать в настройки
-      watchDistance
+      id
     );
 
     if (nearbyPoints.length > 0) {

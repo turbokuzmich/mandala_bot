@@ -11,6 +11,8 @@ import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
 import pick from "lodash/pick.js";
 import omit from "lodash/omit.js";
+import get from "lodash/get.js";
+import property from "lodash/property.js";
 import {
   checkPointsInterval,
   ipcId,
@@ -272,18 +274,10 @@ apiServer.get(
   { schema: { query: settingsRequestSchema } },
   async function (request) {
     try {
-      const settings = await db.settings
-        .findOne({
-          selector: {
-            chatId: { $eq: request.query.chat_id },
-          },
-        })
-        .exec();
-
-      const distance =
-        settings === null ? watchDistance : settings.get("distance");
-
-      return { status: "success", distance };
+      return {
+        status: "success",
+        distance: await getDistanceForChatId(request.query.chat_id),
+      };
     } catch (error) {
       return { status: "error", message: "Failed to fetch settings" };
     }
@@ -588,16 +582,37 @@ function prepareToSendPoint(point) {
   return pick(point, "id", "latitude", "longitude", "status", "medical");
 }
 
-async function getNearbyPoints({ latitude, longitude, distance }) {
+async function getDistanceForChatId(chatId) {
+  const settings = await db.settings
+    .findOne({
+      selector: {
+        chatId: { $eq: chatId },
+      },
+    })
+    .exec();
+
+  return settings === null ? watchDistance : settings.get("distance");
+}
+
+async function getAllPoints() {
+  return (await db.points.find().exec()).map((point) =>
+    prepareToSendPoint(point.toJSON())
+  );
+}
+
+async function getNearbyPoints({ latitude, longitude, chat }) {
+  const [distance, points] = await Promise.all([
+    getDistanceForChatId(chat),
+    getAllPoints(),
+  ]);
+
   return {
     data: await distanceCalculator.run({
       type: "points",
       latitude,
       longitude,
       distance,
-      points: (
-        await db.points.find().exec()
-      ).map((point) => prepareToSendPoint(point.toJSON())),
+      points,
     }),
   };
 }
@@ -606,6 +621,29 @@ async function getPointById({ id }) {
   const point = await db.points.findOne(id).exec();
 
   return { data: point === null ? null : point.toJSON() };
+}
+
+async function getListenersWithDistances(listeners) {
+  const settings = await db.settings
+    .find({
+      selector: {
+        chatId: { $in: Object.values(listeners).map(property("chat")) },
+      },
+    })
+    .exec();
+
+  const distancesByChatId = settings.reduce(
+    (byChatId, settings) => ({
+      ...byChatId,
+      [settings.get("chatId")]: settings.get("distance"),
+    }),
+    {}
+  );
+
+  return Object.keys(listeners).map((id) => ({
+    ...listeners[id],
+    distance: get(distancesByChatId, listeners[id].chat, watchDistance),
+  }));
 }
 
 function setupApiChannel() {
@@ -635,11 +673,11 @@ function setupApiChannel() {
         ),
         rxjs.map(
           ([
-            socket,
+            _,
             {
-              params: { id, latitude, longitude, distance },
+              params: { id, chat, latitude, longitude },
             },
-          ]) => ({ type: "set", socket, id, latitude, longitude, distance })
+          ]) => ({ type: "set", id, chat, latitude, longitude })
         )
       ),
       socketMessage$.pipe(
@@ -676,12 +714,7 @@ function setupApiChannel() {
             return {
               ...state,
               type: action.type,
-              listeners: Object.keys(state.listeners)
-                .filter((id) => id !== action.id)
-                .reduce(
-                  (listeners, id) => ({ ...listeners, [id]: listeners[id] }),
-                  state.listeners
-                ),
+              listeners: omit(state.listeners, action.id),
             };
           }
           if (action.type === "set") {
@@ -707,29 +740,23 @@ function setupApiChannel() {
         { listeners: {}, type: null, document: null, socket: null }
       ),
       rxjs.filter(({ type }) => type === "document"),
-      rxjs.map(({ socket, listeners, document }) =>
+      rxjs.mergeMap(({ socket, listeners, document }) =>
+        rxjs
+          .from(getListenersWithDistances(listeners))
+          .pipe(rxjs.map((listeners) => ({ socket, listeners, document })))
+      ),
+      rxjs.mergeMap(({ socket, listeners, document }) =>
         rxjs
           .from(
             distanceCalculator.run({
+              listeners,
               type: "listeners",
               latitude: document.latitude,
               longitude: document.longitude,
-              listeners: Object.keys(listeners).reduce(
-                (spec, id) => ({
-                  ...spec,
-                  [id]: {
-                    latitude: listeners[id].latitude,
-                    longitude: listeners[id].longitude,
-                    distance: listeners[id].distance,
-                  },
-                }),
-                {}
-              ),
             })
           )
           .pipe(rxjs.map((ids) => [socket, ids, document]))
-      ),
-      rxjs.mergeAll()
+      )
     )
     .subscribe(([socket, ids, document]) => {
       socket.emit(ipcMessageName, {
