@@ -723,9 +723,7 @@ bot.on("callback_query", async (callback) => {
     message: {
       chat: { id },
       message_id,
-      reply_to_message: {
-        location: { latitude, longitude },
-      },
+      reply_to_message,
     },
     data,
   } = callback;
@@ -734,8 +732,13 @@ bot.on("callback_query", async (callback) => {
 
   if (query.point) {
     await showPointDetails(query.point, id, message_id);
-  } else if (query.points === "all") {
-    await listAllNearbyPoints(id, message_id, latitude, longitude);
+  } else if (query.points === "all" && get(reply_to_message, "location")) {
+    await listAllNearbyPoints(
+      id,
+      message_id,
+      get(reply_to_message, ["location", "latitude"]),
+      get(reply_to_message, ["location", "longitude"])
+    );
   }
 });
 
