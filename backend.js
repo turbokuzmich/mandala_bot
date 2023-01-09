@@ -451,17 +451,15 @@ function prepareToSendPoint(point) {
 
 async function getNearbyPoints({ latitude, longitude, distance }) {
   return {
-    data: await distanceCalculator.run(
-      {
-        latitude,
-        longitude,
-        distance,
-        points: (
-          await db.points.find().exec()
-        ).map((point) => prepareToSendPoint(point.toJSON())),
-      },
-      { name: "getNearbyPoints" }
-    ),
+    data: await distanceCalculator.run({
+      type: "points",
+      latitude,
+      longitude,
+      distance,
+      points: (
+        await db.points.find().exec()
+      ).map((point) => prepareToSendPoint(point.toJSON())),
+    }),
   };
 }
 
@@ -531,7 +529,7 @@ function setupApiChannel() {
           if (action.type === "socket") {
             return {
               ...state,
-              socket,
+              socket: action.socket,
               type: action.type,
             };
           }
@@ -573,20 +571,18 @@ function setupApiChannel() {
       rxjs.map(({ socket, listeners, document }) =>
         rxjs
           .from(
-            distanceCalculator.run(
-              {
-                latitude: document.latitude,
-                longitude: document.longitude,
-                listeners: Object.keys(listeners).reduce(
-                  (listeners, id) => ({
-                    ...listeners,
-                    [id]: { latitude, longitude, distance },
-                  }),
-                  {}
-                ),
-              },
-              { name: "getNearbyListeners" }
-            )
+            distanceCalculator.run({
+              type: "listeners",
+              latitude: document.latitude,
+              longitude: document.longitude,
+              listeners: Object.keys(listeners).reduce(
+                (listeners, id) => ({
+                  ...listeners,
+                  [id]: { latitude, longitude, distance },
+                }),
+                {}
+              ),
+            })
           )
           .pipe(rxjs.map((ids) => [socket, ids, document]))
       ),

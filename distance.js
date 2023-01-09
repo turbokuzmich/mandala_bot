@@ -52,7 +52,10 @@ function getNearbyListeners({ latitude, longitude, listeners }) {
   );
 }
 
-getNearbyPoints.getNearbyPoints = getNearbyPoints;
-getNearbyPoints.getNearbyListeners = getNearbyListeners;
-
-export default getNearbyPoints;
+export default function ({ type, ...params }) {
+  if (type === "points") {
+    return getNearbyPoints(params);
+  } else if (type === "listeners") {
+    return getNearbyListeners(params);
+  }
+}
