@@ -340,7 +340,7 @@ async function showAllNearbyPoints(chatId) {
     await updateListenerLocation({
       message_id: messageId,
       chat: { id: chatId },
-      location: { latitude, longitude },
+      location: pick(resetData, 'latitude', 'longitude'),
     });
   }
 }
