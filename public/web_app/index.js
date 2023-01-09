@@ -185,7 +185,7 @@ const user$ = ymaps$.pipe(
         chat_id: chatId,
       },
     }).pipe(
-      rxjs.map((user) => ({ ...user, isAuthorized: true })),
+      rxjs.map((user) => ({ ...user.user, isAuthorized: true })),
       rxjs.catchError(() =>
         rxjs.of({ isAuthorized: false, id: 0, first_name: "Гость" })
       )

@@ -203,9 +203,12 @@ await db.addCollections({
     schema: {
       title: "User settings",
       version: 0,
-      primaryKey: "chatId",
+      primaryKey: "id",
       type: "object",
       properties: {
+        id: {
+          type: "string",
+        },
         chatId: {
           type: "integer",
         },
@@ -216,6 +219,7 @@ await db.addCollections({
           type: "integer",
         },
       },
+      required: ["id", "chatId"],
     },
   },
 });
