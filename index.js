@@ -1,4 +1,4 @@
-import { writeFile } from "fs/promises";
+// import { writeFile } from "fs/promises";
 import { v4 as uuid } from "uuid";
 import TimeAgo from "javascript-time-ago";
 import TimeAgoRuLocale from "javascript-time-ago/locale/ru";
@@ -276,8 +276,6 @@ async function sendClosestPointIfNeeded(message) {
   const {
     message_id,
     chat: { id },
-    date,
-    edit_date,
     location: { latitude, longitude, live_period },
   } = message;
 
@@ -551,8 +549,7 @@ bot.on("message", async function (message) {
   } else if (web_app_data) {
     console.log(web_app_data);
   } else if (location) {
-    console.log(message_id, message.date);
-    // await sendClosestPointIfNeeded(message);
+    await sendClosestPointIfNeeded(message);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
     await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
       reply_to_message_id: message_id,
@@ -574,8 +571,7 @@ bot.on("webhook_error", (error) => {
 
 bot.on("edited_message", async (message) => {
   if (message.location) {
-    console.log(message.message_id, message.date, message.edit_date);
-    // await sendClosestPointIfNeeded(message);
+    await sendClosestPointIfNeeded(message);
   }
 });
 
