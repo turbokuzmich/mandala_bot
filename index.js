@@ -313,7 +313,7 @@ function clearLiveLocation(id) {
 
 function getLiveLocationTimeoutCleaner(id) {
   return setTimeout(function () {
-    clearLiveLocation();
+    clearLiveLocation(id);
   }, liveLocationTimeout);
 }
 
