@@ -558,7 +558,7 @@ function setupApiChannel() {
           if (action.type === "document") {
             return {
               ...state,
-              document,
+              document: action.document,
               type: action.type,
             };
           }
