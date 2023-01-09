@@ -272,13 +272,25 @@ function getLiveWatchDataByChatId(chatId) {
   return messageId ? liveWatches[messageId] : null;
 }
 
-function getNearbyPointsText(nearbyPoints) {
-  return `${nearbyPoints.length} ${plural(
+function getNearbyPointsText(nearbyPoints, asNewPoints = false) {
+  const appeared = plural(
     nearbyPoints.length,
-    "новый пост",
-    "новых поста",
-    "новых постов"
-  )} ДПС поблизости`;
+    "появился",
+    "появилось",
+    "появилось"
+  );
+  const found = plural(
+    nearbyPoints.length,
+    "обнаружен",
+    "обнаружено",
+    "обнаружено"
+  );
+  const newbie = plural(nearbyPoints.length, "новый", "новых", "новых");
+  const post = plural(nearbyPoints.length, "пост", "поста", "постов");
+
+  return asNewPoints
+    ? `Поблизости ${appeared} ${nearbyPoints.length} ${newbie} ${post} ДПС`
+    : `Рядом с вами ${found} ${nearbyPoints.length} ${post} ДПС`;
 }
 
 function getNearbyPointsButtons(id, nearbyPoints) {
@@ -298,7 +310,7 @@ function getNearbyPointsButtons(id, nearbyPoints) {
     ]),
     [
       {
-        text: "Показать все почты по близости",
+        text: "Показать все посты поблизости",
         callback_data: JSON.stringify({ points: "all" }),
       },
     ],
@@ -342,16 +354,11 @@ async function showPointDetails(pointId, chatId, messageId) {
   if (point === null) {
     return bot.sendMessage(
       chatId,
-      "Информация о посте не найдена. Возможно, она была удалена.",
-      {
-        // reply_to_message_id: messageId,
-      }
+      "Информация о посте не найдена. Возможно, она была удалена."
     );
   }
 
-  await bot.sendLocation(chatId, point.latitude, point.longitude, {
-    // reply_to_message_id: messageId,
-  });
+  await bot.sendLocation(chatId, point.latitude, point.longitude);
 
   await bot.sendMessage(
     chatId,
@@ -376,7 +383,6 @@ async function showPointDetails(pointId, chatId, messageId) {
       .join("\n\n"),
     {
       parse_mode: "Markdown",
-      // reply_to_message_id: messageId,
     }
   );
 }
@@ -413,16 +419,12 @@ async function notifyListener(
   if (error && lastMessageType !== "error") {
     await bot.sendMessage(
       chatId,
-      "Не удалось получить информацию о ближайших постах",
-      {
-        // reply_to_message_id: messageId,
-      }
+      "Не удалось получить информацию о ближайших постах"
     );
 
     set(liveWatches, [messageId, "lastMessageType"], "error");
   } else if (nearbyPoints.length > 0) {
-    await bot.sendMessage(chatId, getNearbyPointsText(nearbyPoints), {
-      // reply_to_message_id: messageId,
+    await bot.sendMessage(chatId, getNearbyPointsText(nearbyPoints, true), {
       reply_markup: {
         inline_keyboard: getNearbyPointsButtons(chatId, nearbyPoints),
       },
@@ -438,9 +440,7 @@ async function notifyListener(
       ])
     );
   } else if (allNearbyPoints.length === 0 && lastMessageType !== "empty") {
-    await bot.sendMessage(chatId, "Рядом с вами нет постов", {
-      // reply_to_message_id: messageId,
-    });
+    await bot.sendMessage(chatId, "Рядом с вами нет постов");
 
     set(liveWatches, [messageId, "lastMessageType"], "empty");
   }
@@ -498,17 +498,12 @@ async function sendNearbyPoints(message) {
         },
       });
     } else {
-      await bot.sendMessage(id, "Рядом с вами нет постов", {
-        // reply_to_message_id: message_id,
-      });
+      await bot.sendMessage(id, "Рядом с вами нет постов");
     }
   } catch (error) {
     await bot.sendMessage(
       id,
-      "Не удалось получить информацию о ближайших постах",
-      {
-        // reply_to_message_id: message_id,
-      }
+      "Не удалось получить информацию о ближайших постах"
     );
   }
 }
@@ -638,7 +633,6 @@ bot.onText(commandRegExps.map, async function (message) {
     id,
     "На карте можно посмотреть посты ДПС, добавить новые или подтвердить текущие. Включив оповещения вы будете уведомлены о приближении к постам.",
     {
-      // reply_to_message_id: message_id,
       reply_markup: {
         one_time_keyboard: true,
         keyboard: [
@@ -713,9 +707,7 @@ bot.on("message", async function (message) {
   } else if (location) {
     await handleNearbyPointsRequest(message);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
-    await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
-      // reply_to_message_id: message_id,
-    });
+    await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.");
   }
 });
 
