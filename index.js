@@ -76,7 +76,10 @@ class ApiChannel {
   }
 
   stopNearbyPointsNotifications(id) {
-    return this._request("stopNearbyPointsNotifications", { id });
+    return this._respond({
+      method: "stopNearbyPointsNotifications",
+      params: { id },
+    });
   }
 
   listen() {
@@ -125,7 +128,7 @@ class ApiChannel {
 
       function onTimeout() {
         cleanUp();
-        reject("ApiChannel timed out");
+        reject("ApiChannel timed out", method, params);
       }
 
       function onMessage(message) {
@@ -293,10 +296,10 @@ function getNearbyPointsButtons(id, nearbyPoints) {
   ];
 }
 
-async function clearLiveLocation(id) {
+function clearLiveLocation(id) {
   console.log("deleted live watch", id);
   delete liveWatches[id];
-  await apiChannel.stopNearbyPointsNotifications(id);
+  apiChannel.stopNearbyPointsNotifications(id);
 }
 
 function getLiveLocationTimeoutCleaner(id) {
