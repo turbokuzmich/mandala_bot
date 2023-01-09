@@ -390,7 +390,12 @@ async function showPointDetails(pointId, chatId, messageId) {
       ],
       ["Описание", point.description],
       ["Создан", relativeTime.format(point.createdAt)],
-      ["Автор", point.createdBy],
+      [
+        "Автор",
+        [point.createdBy.first_name, point.createdBy.last_name]
+          .filter(Boolean)
+          .join(" "),
+      ],
     ]
       .filter(([_, text]) => Boolean(text))
       .map(([header, text]) => `*${header}*\n${text}`)
