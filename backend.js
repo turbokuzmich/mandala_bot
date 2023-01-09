@@ -1,9 +1,11 @@
 import { createRxDatabase, addRxPlugin } from "rxdb";
 import { RxDBUpdatePlugin } from "rxdb/plugins/update";
+import { RxDBJsonDumpPlugin } from "rxdb/plugins/json-dump";
 import { getRxStorageMemory } from "rxdb/plugins/memory";
 import { config } from "dotenv";
 import { v4 as uuid } from "uuid";
 import { resolve } from "path";
+import { writeFile, readFile } from "fs/promises";
 import ipc from "node-ipc";
 import * as rxjs from "rxjs";
 import Piscina from "piscina";
@@ -13,6 +15,7 @@ import pick from "lodash/pick.js";
 import omit from "lodash/omit.js";
 import get from "lodash/get.js";
 import property from "lodash/property.js";
+import exitHook from "async-exit-hook";
 import {
   checkPointsInterval,
   ipcId,
@@ -27,6 +30,7 @@ const distanceCalculator = new Piscina({
   filename: resolve(process.cwd(), "distance.js"),
 });
 
+addRxPlugin(RxDBJsonDumpPlugin);
 addRxPlugin(RxDBUpdatePlugin);
 config();
 
@@ -476,6 +480,18 @@ function delay(ms = 1000) {
   });
 }
 
+async function restoreSettings() {
+  try {
+    const raw = await readFile(resolve(process.cwd(), "dump.json"), "utf-8");
+    const dump = JSON.parse(raw);
+
+    await db.settings.importJSON(dump);
+    console.log("settings restored");
+  } catch (error) {
+    console.log("failed to restore", error);
+  }
+}
+
 async function startPointsChecker() {
   while (true) {
     const now = Date.now();
@@ -815,6 +831,7 @@ async function main() {
     const address = await apiServer.listen({ port: process.env.BACKEND_PORT });
     console.log("listening to", address);
 
+    restoreSettings();
     startPointsChecker();
     setupWebsocket();
     setupApiChannel();
@@ -822,5 +839,16 @@ async function main() {
     console.log("failed to listen", error, process.env.BACKEND_PORT);
   }
 }
+
+exitHook((callback) => {
+  db.settings
+    .exportJSON()
+    .then((dump) =>
+      writeFile(resolve(process.cwd(), "dump.json"), JSON.stringify(dump))
+    )
+    .finally(() => {
+      callback();
+    });
+});
 
 main();

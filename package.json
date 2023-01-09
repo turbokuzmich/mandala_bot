@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "abort-controller": "^3.0.0",
+    "async-exit-hook": "^2.0.1",
     "color": "^4.2.3",
     "dotenv": "^16.0.3",
     "fastify": "^4.10.2",

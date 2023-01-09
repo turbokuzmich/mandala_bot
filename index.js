@@ -392,7 +392,7 @@ async function showPointDetails(pointId, chatId, messageId) {
       point.votedAt
         ? `Последнее подтверждение ${relativeTime.format(point.votedAt)}.`
         : null,
-      point.medical ? "Работает медслужба" : null,
+      point.medical ? "Работает медслужба." : null,
       point.description ? "\n" : null,
       point.description ? `*От ${author}:*` : null,
       point.description ? point.description : null,
