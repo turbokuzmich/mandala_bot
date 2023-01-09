@@ -476,7 +476,6 @@ async function updateListenerLocation({
 
 async function sendNearbyPoints(message) {
   const {
-    message_id,
     chat: { id },
     location: { latitude, longitude },
   } = message;
@@ -490,12 +489,7 @@ async function sendNearbyPoints(message) {
     );
 
     if (nearbyPoints.length > 0) {
-      await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
-        reply_to_message_id: message_id,
-        reply_markup: {
-          inline_keyboard: getNearbyPointsButtons(id, nearbyPoints),
-        },
-      });
+      await bot.sendMessage(id, getNearbyPointsText(nearbyPoints));
     } else {
       await bot.sendMessage(id, "Рядом с вами нет постов");
     }
