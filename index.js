@@ -231,15 +231,15 @@ async function sendCalculationImage(chat, message, result) {
 const liveWatches = {};
 
 function getNearbyPointsText(nearbyPoints) {
-  return `Рядок с вами найдено ${nearbyPoints.length} ${plural(
+  return `Рядом с вами ${nearbyPoints.length} ${plural(
     nearbyPoints.length,
-    "точка",
-    "точки",
-    "точек"
+    "пост",
+    "поста",
+    "постов"
   )}`;
 }
 
-function getNearbyPointsButtons(nearbyPoints) {
+function getNearbyPointsButtons(id, nearbyPoints) {
   return [
     ...nearbyPoints.map(({ point, distance }) => [
       {
@@ -309,7 +309,7 @@ async function sendClosestPointIfNeeded(message) {
         await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
           reply_to_message_id: message_id,
           reply_markup: {
-            inline_keyboard: getNearbyPointsButtons(nearbyPoints),
+            inline_keyboard: getNearbyPointsButtons(id, nearbyPoints),
           },
         });
       }
@@ -325,7 +325,7 @@ async function sendClosestPointIfNeeded(message) {
           ])
         );
       }
-    } else {
+    } else if (allNearbyPoints.length === 0) {
       if (!isLiveMessage || lastLiveMessageType !== "empty") {
         await bot.sendMessage(id, "Рядом с вами нет постов", {
           reply_to_message_id: message_id,
@@ -337,6 +337,7 @@ async function sendClosestPointIfNeeded(message) {
       }
     }
   } catch (error) {
+    console.log(error);
     if (!isLiveMessage || lastLiveMessageType !== "error") {
       await bot.sendMessage(
         id,
