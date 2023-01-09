@@ -4,6 +4,8 @@ import TimeAgo from "javascript-time-ago";
 import TimeAgoRuLocale from "javascript-time-ago/locale/ru";
 import { config } from "dotenv";
 import ipc from "node-ipc";
+import set from "lodash/set.js";
+import get from "lodash/get.js";
 import path from "path";
 import TelegramBot from "node-telegram-bot-api";
 import Piscina from "piscina";
@@ -19,6 +21,7 @@ import {
   calculationTimeout,
   ResultFormat,
   ipcResponseTimeout,
+  liveLocationTimeout,
 } from "./constants.js";
 
 config();
@@ -225,72 +228,137 @@ async function sendCalculationImage(chat, message, result) {
   }
 }
 
+const liveWatches = {};
+
+function getNearbyPointsText(nearbyPoints) {
+  return `Рядок с вами найдено ${nearbyPoints.length} ${plural(
+    nearbyPoints.length,
+    "точка",
+    "точки",
+    "точек"
+  )}`;
+}
+
+function getNearbyPointsButtons(nearbyPoints) {
+  return [
+    ...nearbyPoints.map(({ point, distance }) => [
+      {
+        text: `${Math.floor(distance)} ${plural(
+          Math.floor(distance),
+          "метр",
+          "метра",
+          "метров"
+        )}. ${PointStatusDescription[point.status]}. ${
+          point.medical ? "Медслужба" : ""
+        }`,
+        callback_data: JSON.stringify({ point: point.id }),
+      },
+    ]),
+    [
+      {
+        text: "Открыть карту",
+        web_app: {
+          url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
+        },
+      },
+    ],
+  ];
+}
+
+function getLiveLocationTimeoutCleaner(id) {
+  return setTimeout(function () {
+    console.log("deleted live watch", id);
+    delete liveWatches[id];
+  }, liveLocationTimeout);
+}
+
 async function sendClosestPointIfNeeded(message) {
   const {
     message_id,
     chat: { id },
-    location: { latitude, longitude },
+    date,
+    edit_date,
+    location: { latitude, longitude, live_period },
   } = message;
 
+  if (live_period && !liveWatches[message_id]) {
+    liveWatches[message_id] = {};
+  }
+
+  const isLiveMessage = Boolean(liveWatches[message_id]);
+  const lastLiveMessageType = get(liveWatches, [message_id, "lastMessageType"]);
+  const liveMessageTimer = get(liveWatches, [message_id, "timer"]);
+  const shownPoints = get(liveWatches, [message_id, "points"], new Set());
+
+  if (isLiveMessage && liveMessageTimer) {
+    clearTimeout(liveMessageTimer);
+  }
+
   try {
-    const info = await apiChannel.getNearbyPoints(
+    const allNearbyPoints = await apiChannel.getNearbyPoints(
       latitude,
       longitude,
       // FIXME это убрать в настройки
       watchDistance
     );
 
-    if (info.length > 0) {
-      await bot.sendMessage(
-        id,
-        `Рядок с вами найдено ${info.length} ${plural(
-          info.length,
-          "точка",
-          "точки",
-          "точек"
-        )}`,
-        {
+    const nearbyPoints = isLiveMessage
+      ? allNearbyPoints.filter(({ point: { id } }) => !shownPoints.has(id))
+      : allNearbyPoints;
+
+    if (nearbyPoints.length > 0) {
+      if (!isLiveMessage || lastLiveMessageType !== "points") {
+        await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
           reply_to_message_id: message_id,
           reply_markup: {
-            inline_keyboard: [
-              ...info.map(({ point, distance }) => [
-                {
-                  text: `${Math.floor(distance)} ${plural(
-                    Math.floor(distance),
-                    "метр",
-                    "метра",
-                    "метров"
-                  )}. ${PointStatusDescription[point.status]}. ${
-                    point.medical ? "Медслужба" : ""
-                  }`,
-                  callback_data: JSON.stringify({ point: point.id }),
-                },
-              ]),
-              [
-                {
-                  text: "Открыть карту",
-                  web_app: {
-                    url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
-                  },
-                },
-              ],
-            ],
+            inline_keyboard: getNearbyPointsButtons(nearbyPoints),
           },
-        }
-      );
+        });
+      }
+
+      if (isLiveMessage) {
+        set(liveWatches, [message_id, "lastMessageType"], "points");
+        set(
+          liveWatches,
+          [message_id, "points"],
+          new Set([
+            ...shownPoints.values(),
+            ...nearbyPoints.map(({ point: { id } }) => id),
+          ])
+        );
+      }
     } else {
-      await bot.sendMessage(id, "Рядом с вами нет постов", {
-        reply_to_message_id: message_id,
-      });
+      if (!isLiveMessage || lastLiveMessageType !== "empty") {
+        await bot.sendMessage(id, "Рядом с вами нет постов", {
+          reply_to_message_id: message_id,
+        });
+
+        if (isLiveMessage) {
+          set(liveWatches, [message_id, "lastMessageType"], "empty");
+        }
+      }
     }
   } catch (error) {
-    console.log(error);
-    await bot.sendMessage(
-      id,
-      "Не удалось получить информацию о ближайших постах",
-      {
-        reply_to_message_id: message_id,
+    if (!isLiveMessage || lastLiveMessageType !== "error") {
+      await bot.sendMessage(
+        id,
+        "Не удалось получить информацию о ближайших постах",
+        {
+          reply_to_message_id: message_id,
+        }
+      );
+
+      if (isLiveMessage) {
+        set(liveWatches, [message_id, "lastMessageType"], "error");
       }
+    }
+  }
+
+  if (isLiveMessage) {
+    set(
+      liveWatches,
+      [message_id, "timer"],
+      getLiveLocationTimeoutCleaner(message_id)
     );
   }
 }
@@ -483,7 +551,8 @@ bot.on("message", async function (message) {
   } else if (web_app_data) {
     console.log(web_app_data);
   } else if (location) {
-    await sendClosestPointIfNeeded(message);
+    console.log(message_id, message.date);
+    // await sendClosestPointIfNeeded(message);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
     await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
       reply_to_message_id: message_id,
@@ -505,7 +574,8 @@ bot.on("webhook_error", (error) => {
 
 bot.on("edited_message", async (message) => {
   if (message.location) {
-    await sendClosestPointIfNeeded(message);
+    console.log(message.message_id, message.date, message.edit_date);
+    // await sendClosestPointIfNeeded(message);
   }
 });
 

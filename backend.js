@@ -11,27 +11,17 @@ import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
 import pick from "lodash/pick.js";
 import {
+  checkPointsInterval,
   ipcId,
   ipcMessageName,
   ipcResponseTimeout,
   PointStatus,
+  pointTimeouts,
 } from "./constants.js";
 
 const distanceCalculator = new Piscina({
   filename: resolve(process.cwd(), "distance.js"),
 });
-
-const sec = (value = 1) => value * 1000;
-const min = (value = 1) => value * sec(60);
-
-const POINT_TIMEOUTS = {
-  [PointStatus.created]: min(),
-  [PointStatus.voted]: min(2),
-  [PointStatus.unvotedWeak]: min(5),
-  [PointStatus.unvotedStrong]: min(10),
-};
-
-const CHECK_POINTS_INTERVAL = sec(10);
 
 addRxPlugin(RxDBUpdatePlugin);
 config();
@@ -256,7 +246,7 @@ apiServer.post(
     const id = uuid();
     const status = PointStatus.created;
     const createdAt = Date.now();
-    const checkAt = createdAt + POINT_TIMEOUTS[status];
+    const checkAt = createdAt + pointTimeouts[status];
 
     const {
       latitude,
@@ -336,7 +326,7 @@ apiServer.post(
         votes,
         votedAt: now,
         status: PointStatus.voted,
-        checkAt: now + POINT_TIMEOUTS[PointStatus.voted],
+        checkAt: now + pointTimeouts[PointStatus.voted],
       },
     });
 
@@ -373,14 +363,14 @@ async function startPointsChecker() {
         return point.update({
           $set: {
             status: PointStatus.unvotedWeak,
-            checkAt: now + POINT_TIMEOUTS[PointStatus.unvotedWeak],
+            checkAt: now + pointTimeouts[PointStatus.unvotedWeak],
           },
         });
       } else if (status === PointStatus.unvotedWeak) {
         return point.update({
           $set: {
             status: PointStatus.unvotedStrong,
-            checkAt: now + POINT_TIMEOUTS[PointStatus.unvotedStrong],
+            checkAt: now + pointTimeouts[PointStatus.unvotedStrong],
           },
         });
       } else {
@@ -390,7 +380,7 @@ async function startPointsChecker() {
 
     await Promise.all(updates);
 
-    await delay(CHECK_POINTS_INTERVAL);
+    await delay(checkPointsInterval);
   }
 }
 

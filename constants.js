@@ -1,5 +1,8 @@
 import Color from "color";
 
+const sec = (value = 1) => value * 1000;
+const min = (value = 1) => value * sec(60);
+
 export const CalculationStatus = {
   Validation: "validation",
   Success: "success",
@@ -25,6 +28,7 @@ export const mandalaBlockSize = 30;
 export const mandalaBlocksCount = 16;
 export const mandalaPadding = 70;
 export const watchDistance = 500;
+export const liveLocationTimeout = min(2);
 
 export const PointStatus = {
   created: "created",
@@ -39,6 +43,15 @@ export const PointStatusDescription = {
   [PointStatus.unvotedWeak]: "Без подтверждений",
   [PointStatus.unvotedStrong]: "Давно без подтверждений",
 };
+
+export const pointTimeouts = {
+  [PointStatus.created]: min(),
+  [PointStatus.voted]: min(2),
+  [PointStatus.unvotedWeak]: min(5),
+  [PointStatus.unvotedStrong]: min(10),
+};
+
+export const checkPointsInterval = sec(10);
 
 export const ipcId = "mandala_bot_ipc_channel";
 export const ipcMessageName = "mandala_bot_ipc_message";
