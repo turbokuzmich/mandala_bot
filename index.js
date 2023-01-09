@@ -380,17 +380,18 @@ async function showPointDetails(pointId, chatId, messageId) {
   await bot.sendMessage(
     chatId,
     [
-      `Точка отмечена пользователем ${author} ${relativeTime.format(
-        point.createdAt
-      )}.`,
+      `${author} отметил ${relativeTime.format(point.createdAt)}.`,
       point.votedAt
         ? `Подтвердили ${point.votes.length} ${plural(
             point.votes.length,
             "человек",
             "человека",
             "человек"
-          )} (последнее — ${relativeTime.format(point.votedAt)}).`
+          )}.`
         : "Подтверждений не было.",
+      point.votedAt
+        ? `Последнее подтверждение ${relativeTime.format(point.votedAt)}).`
+        : null,
       point.medical ? "Работает медслужба" : null,
       point.description ? "\n" : null,
       point.description ? `*От ${author}:*` : null,
