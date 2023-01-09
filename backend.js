@@ -212,9 +212,6 @@ await db.addCollections({
         chatId: {
           type: "integer",
         },
-        alias: {
-          type: "string",
-        },
         distance: {
           type: "integer",
         },

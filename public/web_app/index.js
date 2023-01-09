@@ -14,7 +14,7 @@ const appendButton = document.querySelector(".js-button-append");
 const cancelButton = document.querySelector(".js-button-cancel");
 const voteButton = document.querySelector(".js-button-vote");
 const voteCancelButton = document.querySelector(".js-button-cancel-vote");
-const refreshButton = document.querySelector(".js-refresh");
+const settingsButton = document.querySelector(".js-settings-button");
 
 const getRelativeTimeFormatter = (function () {
   let formatter = null;
@@ -152,7 +152,7 @@ const appendClicks$ = rxjs.fromEvent(appendButton, "click");
 const voteClicks$ = rxjs.fromEvent(voteButton, "click");
 const voteCancelClicks$ = rxjs.fromEvent(voteCancelButton, "click");
 
-const refreshClicks$ = rxjs.fromEvent(refreshButton, "click");
+const settingsClicks$ = rxjs.fromEvent(settingsButton, "click");
 
 const newPointCoords$ = rxjs
   .merge(
@@ -261,7 +261,7 @@ const pointVoted$ = user$.pipe(
 
 const fetchInterval = rxjs.interval(1 * 60 * 1000);
 
-const fetchedPoints$ = rxjs.merge(ymaps$, refreshClicks$, fetchInterval).pipe(
+const fetchedPoints$ = rxjs.merge(ymaps$, fetchInterval).pipe(
   rxjs.map(() =>
     get$("/map/points").pipe(rxjs.catchError(() => rxjs.of({ points: [] })))
   ),

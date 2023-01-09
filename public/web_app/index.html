@@ -89,13 +89,35 @@
     <div class="wrapper">
       <nav class="navbar tg-navbar">
         <span class="navbar-brand h1 mb-0 js-user-info"></span>
-        <button class="btn btn-outline-light btn-sm js-refresh">
-          <i class="fa-solid fa-repeat"></i>
+        <button class="btn btn-outline-light btn-sm js-button-settings">
+          <i class="fa-solid fa-wrench"></i>
         </button>
       </nav>
       <div id="map" class="map js-map"></div>
     </div>
     <div class="pane-container">
+      <div>
+        <h4>Настройки</h4>
+        <div class="form-group">
+          <label for="settings-distance">Радиус обнаружения постов, м</label>
+          <input
+            min="200"
+            max="500"
+            step="50"
+            type="range"
+            class="form-control-range js-settings-distance"
+            id="settings-distance"
+          />
+        </div>
+        <div class="buttons">
+          <button class="btn btn-primary js-button-apply-settings">
+            Подтвердить
+          </button>
+          <button class="btn btn-outline-secondary js-button-cancel-settings">
+            Отмена
+          </button>
+        </div>
+      </div>
       <div class="pane js-pane-view">
         <h4>Подтверждение точки</h4>
         <div class="buttons">
@@ -106,27 +128,25 @@
         </div>
       </div>
       <div class="pane js-pane-actions">
-        <div class="point-info">
-          <h4>Добавление точки</h4>
-          <p>Координаты: <span class="js-point-info"></span></p>
-          <div class="form-group form-check">
-            <input
-              type="checkbox"
-              class="form-check-input js-point-medical"
-              id="pointMedical"
-            />
-            <label class="form-check-label" for="pointMedical"
-              >Работает медслужба</label
-            >
-          </div>
-          <div class="form-group">
-            <label for="pointDescription">Ваш комментарий</label>
-            <textarea
-              class="form-control js-point-description"
-              id="pointDescription"
-              rows="3"
-            ></textarea>
-          </div>
+        <h4>Добавление точки</h4>
+        <p>Координаты: <span class="js-point-info"></span></p>
+        <div class="form-group form-check">
+          <input
+            type="checkbox"
+            class="form-check-input js-point-medical"
+            id="pointMedical"
+          />
+          <label class="form-check-label" for="pointMedical"
+            >Работает медслужба</label
+          >
+        </div>
+        <div class="form-group">
+          <label for="pointDescription">Ваш комментарий</label>
+          <textarea
+            class="form-control js-point-description"
+            id="pointDescription"
+            rows="3"
+          ></textarea>
         </div>
         <div class="buttons">
           <button class="btn btn-primary js-button-append">Добавить</button>
