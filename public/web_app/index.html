@@ -99,10 +99,15 @@
       <div class="pane js-settings-pane">
         <h4>Настройки</h4>
         <div class="form-group">
-          <label for="settings-distance">Радиус обнаружения постов, м</label>
+          <label for="settings-distance"
+            >Радиус обнаружения постов —
+            <span
+              class="settings-distance-string js-settings-distance-string"
+            ></span
+          ></label>
           <input
             min="200"
-            max="500"
+            max="1000"
             step="50"
             value="300"
             type="range"

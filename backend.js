@@ -209,6 +209,8 @@ await db.addCollections({
       properties: {
         id: {
           type: "string",
+          minLength: 8,
+          maxLength: 36,
         },
         chatId: {
           type: "integer",

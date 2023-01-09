@@ -21,6 +21,9 @@ const cancelSettingsButton = document.querySelector(
   ".js-button-cancel-settings"
 );
 const distanceSetting = document.querySelector(".js-settings-distance");
+const distanceSettingString = document.querySelector(
+  ".js-settings-distance-string"
+);
 
 const getRelativeTimeFormatter = (function () {
   let formatter = null;
@@ -33,6 +36,8 @@ const getRelativeTimeFormatter = (function () {
     return formatter;
   };
 })();
+
+const numberFormatter = new Intl.NumberFormat("ru-RU");
 
 const api = axios.create({
   baseURL: "https://m.deluxspa.ru/api",
@@ -161,6 +166,8 @@ const voteCancelClicks$ = rxjs.fromEvent(voteCancelButton, "click");
 const settingsClicks$ = rxjs.fromEvent(settingsButton, "click");
 const settingsApplyClicks$ = rxjs.fromEvent(applySettingsButton, "click");
 const settingsCancelClicks$ = rxjs.fromEvent(cancelSettingsButton, "click");
+
+const distanceChanges$ = rxjs.fromEvent(distanceSetting, "change");
 
 const newPointCoords$ = rxjs
   .merge(
@@ -457,10 +464,15 @@ settingPaneVisible$.subscribe((visible) =>
     : settingsPane.classList.remove("visible")
 );
 
-settings$.subscribe(({ distance }) => {
-  Telegram.WebApp.showAlert(distance);
-  distanceSetting.value = distance;
-});
+rxjs
+  .merge(
+    settings$.pipe(rxjs.map(({ distance }) => distance)),
+    distanceChanges$.pipe(rxjs.map(() => distanceSetting.value))
+  )
+  .subscribe((distance) => {
+    distanceSetting.value = distance;
+    distanceSettingString.innerHTML = `${numberFormatter.format(distance)} м.`;
+  });
 
 user$.subscribe(function ({ isAuthorized, first_name, last_name }) {
   userInfo.innerHTML = isAuthorized
