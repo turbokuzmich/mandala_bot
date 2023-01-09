@@ -317,7 +317,11 @@ function getLiveLocationTimeoutCleaner(id) {
   }, liveLocationTimeout);
 }
 
-async function showAllNearbyPoints(chatId, messageId) {
+async function showAllNearbyPoints(chatId) {
+  const messageId = Object.keys(liveWatches).find(
+    (messageId) => liveWatches[messageId].chat === chatId
+  );
+
   if (liveWatches[messageId]) {
     const resetData = pick(
       liveWatches[messageId],
@@ -754,7 +758,7 @@ bot.on(
     if (query.point) {
       await showPointDetails(query.point, id, message_id);
     } else if (query.points === "all") {
-      await showAllNearbyPoints(id, message_id);
+      await showAllNearbyPoints(id);
     }
   }
 );
