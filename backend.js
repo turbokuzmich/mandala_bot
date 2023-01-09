@@ -640,10 +640,15 @@ async function getListenersWithDistances(listeners) {
     {}
   );
 
-  return Object.keys(listeners).map((id) => ({
-    ...listeners[id],
-    distance: get(distancesByChatId, listeners[id].chat, watchDistance),
-  }));
+  return Object.keys(listeners)
+    .map((id) => ({
+      ...listeners[id],
+      distance: get(distancesByChatId, listeners[id].chat, watchDistance),
+    }))
+    .reduce(
+      (listeners, listener) => ({ ...listeners, [listener.id]: listener }),
+      {}
+    );
 }
 
 function setupApiChannel() {
