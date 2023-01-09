@@ -262,12 +262,12 @@ async function sendCalculationImage(chat, message, result) {
 const liveWatches = {};
 
 function getNearbyPointsText(nearbyPoints) {
-  return `Рядом с вами ${nearbyPoints.length} ${plural(
+  return `${nearbyPoints.length} ${plural(
     nearbyPoints.length,
-    "пост",
-    "поста",
-    "постов"
-  )}`;
+    "новый пост",
+    "новых поста",
+    "новых постов"
+  )} ДПС`;
 }
 
 function getNearbyPointsButtons(id, nearbyPoints) {
