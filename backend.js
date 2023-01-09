@@ -10,6 +10,7 @@ import Piscina from "piscina";
 import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
 import pick from "lodash/pick.js";
+import omit from "lodash/omit.js";
 import {
   checkPointsInterval,
   ipcId,
@@ -444,18 +445,23 @@ function setupWebsocket() {
   });
 }
 
+function prepareToSendPoint(point) {
+  return pick(point, "id", "latitude", "longitude", "status", "medical");
+}
+
 async function getNearbyPoints({ latitude, longitude, distance }) {
   return {
-    data: await distanceCalculator.run({
-      latitude,
-      longitude,
-      distance,
-      points: (
-        await db.points.find().exec()
-      ).map((point) =>
-        pick(point.toJSON(), "id", "latitude", "longitude", "status", "medical")
-      ),
-    }),
+    data: await distanceCalculator.run(
+      {
+        latitude,
+        longitude,
+        distance,
+        points: (
+          await db.points.find().exec()
+        ).map((point) => prepareToSendPoint(point.toJSON())),
+      },
+      { name: "getNearbyPoints" }
+    ),
   };
 }
 
@@ -472,47 +478,165 @@ function setupApiChannel() {
   //   rxjs.switchAll()
   // );
 
-  IPCClient$.pipe(
+  const socketMessage$ = IPCClient$.pipe(
     rxjs.map((socket) =>
       rxjs
         .fromEvent(socket, ipcMessageName)
         .pipe(rxjs.map((message) => [socket, message]))
     ),
     rxjs.switchAll(),
-    rxjs.map(([socket, message]) => {
-      switch (message.method) {
-        case "getNearbyPoints":
-          return rxjs.from(getNearbyPoints(message.params)).pipe(
-            rxjs.timeout({ first: ipcResponseTimeout }),
-            rxjs.map((response) => [socket, message, response]),
-            rxjs.catchError(() =>
-              rxjs.of([
-                socket,
-                message,
-                { error: "Failed to get nearby points" },
-              ])
+    rxjs.share()
+  );
+
+  rxjs
+    .merge(
+      IPCClient$.pipe(rxjs.map((socket) => ({ type: "socket", socket }))),
+      socketMessage$.pipe(
+        rxjs.filter(
+          (_, message) =>
+            message.method === "getNearbyPoints" && message.params.id
+        ),
+        rxjs.map(
+          ([
+            socket,
+            {
+              params: { id, latitude, longitude, distance },
+            },
+          ]) => ({ type: "set", socket, id, latitude, longitude, distance })
+        )
+      ),
+      socketMessage$.pipe(
+        rxjs.filter(
+          ([_, message]) => message.method === "stopNearbyPointsNotifications"
+        ),
+        rxjs.map(
+          ([
+            _,
+            {
+              params: { id },
+            },
+          ]) => ({ type: "remove", id })
+        )
+      ),
+      db.points.insert$.pipe(
+        rxjs.map(({ documentData }) => ({
+          type: "document",
+          document: documentData,
+        }))
+      )
+    )
+    .pipe(
+      rxjs.scan(
+        (state, action) => {
+          if (action.type === "socket") {
+            return {
+              ...state,
+              socket,
+              type: action.type,
+            };
+          }
+          if (action.type === "remove") {
+            return {
+              ...state,
+              type: action.type,
+              listeners: Object.keys(state.listeners)
+                .filter((id) => id !== action.id)
+                .reduce(
+                  (listeners, id) => ({ ...listeners, [id]: listeners[id] }),
+                  state.listeners
+                ),
+            };
+          }
+          if (action.type === "set") {
+            return {
+              ...state,
+              type: action.type,
+              listeners: {
+                ...state.listeners,
+                [action.id]: omit(action, "type"),
+              },
+            };
+          }
+          if (action.type === "document") {
+            return {
+              ...state,
+              document,
+              type: action.type,
+            };
+          }
+
+          return listeners;
+        },
+        { listeners: {}, type: null, document: null, socket: null }
+      ),
+      rxjs.filter(({ type }) => type === "document"),
+      rxjs.map(({ socket, listeners, document }) =>
+        rxjs
+          .from(
+            distanceCalculator.run(
+              {
+                latitude: document.latitude,
+                longitude: document.longitude,
+                listeners: Object.keys(listeners).reduce(
+                  (listeners, id) => ({
+                    ...listeners,
+                    [id]: { latitude, longitude, distance },
+                  }),
+                  {}
+                ),
+              },
+              { name: "getNearbyListeners" }
             )
-          );
-        case "getPointById":
-          return rxjs.from(getPointById(message.params)).pipe(
-            rxjs.timeout({ first: ipcResponseTimeout }),
-            rxjs.map((response) => [socket, message, response]),
-            rxjs.catchError(() =>
-              rxjs.of([socket, message, { error: "Failed to get point" }])
-            )
-          );
-        default:
-          return rxjs.EMPTY;
+          )
+          .pipe(rxjs.map((ids) => [socket, ids, document]))
+      ),
+      rxjs.mergeAll()
+    )
+    .subscribe(([socket, ids, document]) => {
+      socket.emit(ipcMessageName, {
+        ids,
+        method: "notifyNearby",
+        point: prepareToSendPoint(document),
+      });
+    });
+
+  socketMessage$
+    .pipe(
+      rxjs.map(([socket, message]) => {
+        switch (message.method) {
+          case "getNearbyPoints":
+            return rxjs.from(getNearbyPoints(message.params)).pipe(
+              rxjs.timeout({ first: ipcResponseTimeout }),
+              rxjs.map((response) => [socket, message, response]),
+              rxjs.catchError(() =>
+                rxjs.of([
+                  socket,
+                  message,
+                  { error: "Failed to get nearby points" },
+                ])
+              )
+            );
+          case "getPointById":
+            return rxjs.from(getPointById(message.params)).pipe(
+              rxjs.timeout({ first: ipcResponseTimeout }),
+              rxjs.map((response) => [socket, message, response]),
+              rxjs.catchError(() =>
+                rxjs.of([socket, message, { error: "Failed to get point" }])
+              )
+            );
+          default:
+            return rxjs.EMPTY;
+        }
+      }),
+      rxjs.mergeAll()
+    )
+    .subscribe(([socket, { requestId }, { error, data }]) => {
+      if (error) {
+        socket.emit(ipcMessageName, { requestId, error });
+      } else {
+        socket.emit(ipcMessageName, { requestId, data });
       }
-    }),
-    rxjs.mergeAll()
-  ).subscribe(([socket, { requestId }, { error, data }]) => {
-    if (error) {
-      socket.emit(ipcMessageName, { requestId, error });
-    } else {
-      socket.emit(ipcMessageName, { requestId, data });
-    }
-  });
+    });
 }
 
 async function main() {

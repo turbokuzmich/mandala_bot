@@ -23,12 +23,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
   }
 }
 
-export default function getNearbyPoints({
-  latitude,
-  longitude,
-  points,
-  distance,
-}) {
+function getNearbyPoints({ latitude, longitude, points, distance }) {
   return points
     .reduce((points, point) => {
       const distanceToPoint = getDistance(
@@ -44,3 +39,20 @@ export default function getNearbyPoints({
     }, [])
     .sort((pointA, pointB) => pointA.distance - pointB.distance);
 }
+
+function getNearbyListeners({ latitude, longitude, listeners }) {
+  return Object.keys(listeners).filter(
+    (id) =>
+      getDistance(
+        latitude,
+        longitude,
+        listeners[id].latitude,
+        listeners[id].longitude
+      ) <= listeners[id].distance
+  );
+}
+
+getNearbyPoints.getNearbyPoints = getNearbyPoints;
+getNearbyPoints.getNearbyListeners = getNearbyListeners;
+
+export default getNearbyPoints;

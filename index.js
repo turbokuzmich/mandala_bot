@@ -51,12 +51,30 @@ class ApiChannel {
     }
   }
 
-  getNearbyPoints(latitude, longitude, distance) {
-    return this._request("getNearbyPoints", { latitude, longitude, distance });
+  async notifyListenersOfNewNearbyPoint(ids, point) {
+    await Promise.all(
+      ids
+        .map((id) => liveWatches[id])
+        .filter(Boolean)
+        .map(({ chat, message }) => notifyListener(message, chat, [point]))
+    );
+  }
+
+  getNearbyPoints(latitude, longitude, distance, id) {
+    return this._request("getNearbyPoints", {
+      latitude,
+      longitude,
+      distance,
+      id,
+    });
   }
 
   getPointById(id) {
     return this._request("getPointById", { id });
+  }
+
+  stopNearbyPointsNotifications(id) {
+    return this._request("stopNearbyPointsNotifications", { id });
   }
 
   listen() {
@@ -77,6 +95,11 @@ class ApiChannel {
         switch (message.method) {
           case "getChatById":
             await this.sendChat(message.chatId, message.requestId);
+          case "notifyNearby":
+            await this.notifyListenersOfNewNearbyPoint(
+              message.ids,
+              message.point
+            );
         }
       });
     });
@@ -269,40 +292,114 @@ function getLiveLocationTimeoutCleaner(id) {
   return setTimeout(function () {
     console.log("deleted live watch", id);
     delete liveWatches[id];
+    apiChannel.stopNearbyPointsNotifications(id);
   }, liveLocationTimeout);
 }
 
-async function sendClosestPointIfNeeded(message) {
+async function notifyListener(
+  messageId,
+  chatId,
+  allNearbyPoints = [],
+  error = false
+) {
+  if (!liveWatches[messageId]) {
+    liveWatches[messageId] = {
+      chat: chatId,
+      message: messageId,
+    };
+  }
+
+  const lastMessageType = get(liveWatches, [messageId, "lastMessageType"]);
+  const timer = get(liveWatches, [messageId, "timer"]);
+  const shownPoints = get(liveWatches, [messageId, "points"], new Set());
+
+  if (timer) {
+    clearTimeout(timer);
+  }
+
+  const nearbyPoints = allNearbyPoints.filter(
+    ({ point: { id } }) => !shownPoints.has(id)
+  );
+
+  if (error && lastMessageType !== "error") {
+    await bot.sendMessage(
+      chatId,
+      "Не удалось получить информацию о ближайших постах",
+      {
+        reply_to_message_id: messageId,
+      }
+    );
+
+    set(liveWatches, [messageId, "lastMessageType"], "error");
+  } else if (nearbyPoints.length > 0) {
+    await bot.sendMessage(chatId, getNearbyPointsText(nearbyPoints), {
+      reply_to_message_id: messageId,
+      reply_markup: {
+        inline_keyboard: getNearbyPointsButtons(chatId, nearbyPoints),
+      },
+    });
+
+    set(liveWatches, [messageId, "lastMessageType"], "points");
+    set(
+      liveWatches,
+      [messageId, "points"],
+      new Set([
+        ...shownPoints.values(),
+        ...nearbyPoints.map(({ point: { id } }) => id),
+      ])
+    );
+  } else if (allNearbyPoints.length === 0 && lastMessageType !== "empty") {
+    await bot.sendMessage(chatId, "Рядом с вами нет постов", {
+      reply_to_message_id: messageId,
+    });
+
+    set(liveWatches, [messageId, "lastMessageType"], "empty");
+  }
+
+  set(
+    liveWatches,
+    [messageId, "timer"],
+    getLiveLocationTimeoutCleaner(messageId)
+  );
+}
+
+async function updateListenerLocation({
+  message_id,
+  chat: { id },
+  location: { latitude, longitude },
+}) {
+  try {
+    await notifyListener(
+      message_id,
+      id,
+      await apiChannel.getNearbyPoints(
+        latitude,
+        longitude,
+        // FIXME это убрать в настройки
+        watchDistance,
+        message_id
+      ),
+      false
+    );
+  } catch (error) {
+    await notifyListener(message_id, id, [], true);
+  }
+}
+
+async function sendNearbyPoints(message) {
   const {
     message_id,
     chat: { id },
-    location: { latitude, longitude, live_period },
+    location: { latitude, longitude },
   } = message;
 
-  if (live_period && !liveWatches[message_id]) {
-    liveWatches[message_id] = {};
-  }
-
-  const isLiveMessage = Boolean(liveWatches[message_id]);
-  const lastLiveMessageType = get(liveWatches, [message_id, "lastMessageType"]);
-  const liveMessageTimer = get(liveWatches, [message_id, "timer"]);
-  const shownPoints = get(liveWatches, [message_id, "points"], new Set());
-
-  if (isLiveMessage && liveMessageTimer) {
-    clearTimeout(liveMessageTimer);
-  }
-
   try {
-    const allNearbyPoints = await apiChannel.getNearbyPoints(
+    const nearbyPoints = await apiChannel.getNearbyPoints(
       latitude,
       longitude,
       // FIXME это убрать в настройки
       watchDistance
     );
-
-    const nearbyPoints = isLiveMessage
-      ? allNearbyPoints.filter(({ point: { id } }) => !shownPoints.has(id))
-      : allNearbyPoints;
 
     if (nearbyPoints.length > 0) {
       await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
@@ -311,51 +408,27 @@ async function sendClosestPointIfNeeded(message) {
           inline_keyboard: getNearbyPointsButtons(id, nearbyPoints),
         },
       });
-
-      if (isLiveMessage) {
-        set(liveWatches, [message_id, "lastMessageType"], "points");
-        set(
-          liveWatches,
-          [message_id, "points"],
-          new Set([
-            ...shownPoints.values(),
-            ...nearbyPoints.map(({ point: { id } }) => id),
-          ])
-        );
-      }
-    } else if (allNearbyPoints.length === 0) {
-      if (!isLiveMessage || lastLiveMessageType !== "empty") {
-        await bot.sendMessage(id, "Рядом с вами нет постов", {
-          reply_to_message_id: message_id,
-        });
-
-        if (isLiveMessage) {
-          set(liveWatches, [message_id, "lastMessageType"], "empty");
-        }
-      }
+    } else {
+      await bot.sendMessage(id, "Рядом с вами нет постов", {
+        reply_to_message_id: message_id,
+      });
     }
   } catch (error) {
-    if (!isLiveMessage || lastLiveMessageType !== "error") {
-      await bot.sendMessage(
-        id,
-        "Не удалось получить информацию о ближайших постах",
-        {
-          reply_to_message_id: message_id,
-        }
-      );
-
-      if (isLiveMessage) {
-        set(liveWatches, [message_id, "lastMessageType"], "error");
+    await bot.sendMessage(
+      id,
+      "Не удалось получить информацию о ближайших постах",
+      {
+        reply_to_message_id: message_id,
       }
-    }
-  }
-
-  if (isLiveMessage) {
-    set(
-      liveWatches,
-      [message_id, "timer"],
-      getLiveLocationTimeoutCleaner(message_id)
     );
+  }
+}
+
+async function handleNearbyPointsRequest(message) {
+  if (message.location.live_period) {
+    await updateListenerLocation(message);
+  } else {
+    await sendNearbyPoints(message);
   }
 }
 
@@ -547,7 +620,7 @@ bot.on("message", async function (message) {
   } else if (web_app_data) {
     console.log(web_app_data);
   } else if (location) {
-    await sendClosestPointIfNeeded(message);
+    await handleNearbyPointsRequest(message);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
     await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
       reply_to_message_id: message_id,
@@ -569,7 +642,7 @@ bot.on("webhook_error", (error) => {
 
 bot.on("edited_message", async (message) => {
   if (message.location) {
-    await sendClosestPointIfNeeded(message);
+    await handleNearbyPointsRequest(message);
   }
 });
 
