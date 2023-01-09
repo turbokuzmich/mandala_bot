@@ -264,13 +264,21 @@ async function sendCalculationImage(chat, message, result) {
 
 const liveWatches = {};
 
+function getLiveWatchDataByChatId(chatId) {
+  const messageId = Object.keys(liveWatches).find(
+    (messageId) => liveWatches[messageId].chat === chatId
+  );
+
+  return messageId ? liveWatches[messageId] : null;
+}
+
 function getNearbyPointsText(nearbyPoints) {
   return `${nearbyPoints.length} ${plural(
     nearbyPoints.length,
     "новый пост",
     "новых поста",
     "новых постов"
-  )} ДПС`;
+  )} ДПС поблизости`;
 }
 
 function getNearbyPointsButtons(id, nearbyPoints) {
@@ -317,30 +325,13 @@ function getLiveLocationTimeoutCleaner(id) {
   }, liveLocationTimeout);
 }
 
-async function showAllNearbyPoints(chatId) {
-  const messageId = Object.keys(liveWatches).find(
-    (messageId) => liveWatches[messageId].chat === chatId
-  );
+async function listAllNearbyPoints(chatId) {
+  const liveData = getLiveWatchDataByChatId(chatId);
 
-  if (liveWatches[messageId]) {
-    const resetData = pick(
-      liveWatches[messageId],
-      "chat",
-      "message",
-      "latitude",
-      "longitude"
-    );
-
-    if (liveWatches[messageId].timer) {
-      clearTimeout(liveWatches[messageId].timer);
-    }
-
-    liveWatches[messageId] = resetData;
-
-    await updateListenerLocation({
-      message_id: messageId,
+  if (liveData) {
+    await sendNearbyPoints({
       chat: { id: chatId },
-      location: pick(resetData, "latitude", "longitude"),
+      location: pick(liveData, "latitude", "longitude"),
     });
   }
 }
@@ -351,7 +342,7 @@ async function showPointDetails(pointId, chatId, messageId) {
   if (point === null) {
     return bot.sendMessage(
       chatId,
-      "Точка не найдена. Возможно, она была удалена.",
+      "Информация о посте не найдена. Возможно, она была удалена.",
       {
         // reply_to_message_id: messageId,
       }
@@ -488,7 +479,6 @@ async function updateListenerLocation({
 
 async function sendNearbyPoints(message) {
   const {
-    message_id,
     chat: { id },
     location: { latitude, longitude },
   } = message;
@@ -503,7 +493,6 @@ async function sendNearbyPoints(message) {
 
     if (nearbyPoints.length > 0) {
       await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
-        // reply_to_message_id: message_id,
         reply_markup: {
           inline_keyboard: getNearbyPointsButtons(id, nearbyPoints),
         },
@@ -758,7 +747,7 @@ bot.on(
     if (query.point) {
       await showPointDetails(query.point, id, message_id);
     } else if (query.points === "all") {
-      await showAllNearbyPoints(id);
+      await listAllNearbyPoints(id);
     }
   }
 );
