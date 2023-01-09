@@ -15,7 +15,6 @@ import timeout from "p-timeout";
 import plural from "plural-ru";
 import {
   ipcId,
-  watchDistance,
   ipcMessageName,
   PointStatusDescription,
   CalculationStatus,
@@ -374,32 +373,31 @@ async function showPointDetails(pointId, chatId, messageId) {
 
   await bot.sendLocation(chatId, point.latitude, point.longitude);
 
+  const author = [point.createdBy.first_name, point.createdBy.last_name]
+    .filter(Boolean)
+    .join(" ");
+
   await bot.sendMessage(
     chatId,
     [
-      [
-        "Координаты",
-        `${point.latitude.toPrecision(6)}, ${point.longitude.toPrecision(6)}`,
-      ],
-      ["Статус", PointStatusDescription[point.status]],
-      ["Медицинская служба", point.medical ? "Присутствует" : "Отсутствует"],
-      ["Количество подтверждений", `${point.votes.length}`],
-      [
-        "Последнее подтверждение",
-        point.votedAt ? relativeTime.format(point.votedAt) : null,
-      ],
-      ["Описание", point.description],
-      ["Создан", relativeTime.format(point.createdAt)],
-      [
-        "Автор",
-        [point.createdBy.first_name, point.createdBy.last_name]
-          .filter(Boolean)
-          .join(" "),
-      ],
+      `Точка отмечена пользователем ${author} ${relativeTime.format(
+        point.createdAt
+      )}.`,
+      point.votedAt
+        ? `Подтвердили ${point.votes.length} ${plural(
+            point.votes.length,
+            "человек",
+            "человека",
+            "человек"
+          )} (последнее — ${relativeTime.format(point.votedAt)}).`
+        : "Подтверждений не было.",
+      point.medical ? "Работает медслужба" : null,
+      point.description ? "\n" : null,
+      point.description ? `*От ${author}:*` : null,
+      point.description ? point.description : null,
     ]
-      .filter(([_, text]) => Boolean(text))
-      .map(([header, text]) => `*${header}*\n${text}`)
-      .join("\n\n"),
+      .filter(Boolean)
+      .join("\n"),
     {
       parse_mode: "Markdown",
     }
