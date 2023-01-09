@@ -337,15 +337,12 @@ function getLiveLocationTimeoutCleaner(id) {
   }, liveLocationTimeout);
 }
 
-async function listAllNearbyPoints(chatId) {
-  const liveData = getLiveWatchDataByChatId(chatId);
-
-  if (liveData) {
-    await sendNearbyPoints({
-      chat: { id: chatId },
-      location: pick(liveData, "latitude", "longitude"),
-    });
-  }
+async function listAllNearbyPoints(chatId, messageId, latitude, longitude) {
+  await sendNearbyPoints({
+    message_id: messageId,
+    chat: { id: chatId },
+    location: { latitude, longitude },
+  });
 }
 
 async function showPointDetails(pointId, chatId, messageId) {
@@ -479,6 +476,7 @@ async function updateListenerLocation({
 
 async function sendNearbyPoints(message) {
   const {
+    message_id,
     chat: { id },
     location: { latitude, longitude },
   } = message;
@@ -493,6 +491,7 @@ async function sendNearbyPoints(message) {
 
     if (nearbyPoints.length > 0) {
       await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
+        reply_to_message_id: message_id,
         reply_markup: {
           inline_keyboard: getNearbyPointsButtons(id, nearbyPoints),
         },
@@ -725,24 +724,26 @@ bot.on("edited_message", async (message) => {
   }
 });
 
-bot.on(
-  "callback_query",
-  async ({
+bot.on("callback_query", async (callback) => {
+  const {
     message: {
       chat: { id },
       message_id,
+      reply_to_message: {
+        location: { latitude, longitude },
+      },
     },
     data,
-  }) => {
-    const query = JSON.parse(data);
+  } = callback;
 
-    if (query.point) {
-      await showPointDetails(query.point, id, message_id);
-    } else if (query.points === "all") {
-      await listAllNearbyPoints(id);
-    }
+  const query = JSON.parse(data);
+
+  if (query.point) {
+    await showPointDetails(query.point, id, message_id);
+  } else if (query.points === "all") {
+    await listAllNearbyPoints(id, message_id, latitude, longitude);
   }
-);
+});
 
 async function main() {
   apiChannel.listen();
