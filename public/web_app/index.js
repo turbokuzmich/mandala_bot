@@ -14,7 +14,13 @@ const appendButton = document.querySelector(".js-button-append");
 const cancelButton = document.querySelector(".js-button-cancel");
 const voteButton = document.querySelector(".js-button-vote");
 const voteCancelButton = document.querySelector(".js-button-cancel-vote");
-const settingsButton = document.querySelector(".js-settings-button");
+const settingsButton = document.querySelector(".js-button-settings");
+const settingsPane = document.querySelector(".js-settings-pane");
+const applySettingsButton = document.querySelector(".js-button-apply-settings");
+const cancelSettingsButton = document.querySelector(
+  ".js-button-cancel-settings"
+);
+const distanceSetting = document.querySelector(".js-settings-distance");
 
 const getRelativeTimeFormatter = (function () {
   let formatter = null;
@@ -153,6 +159,8 @@ const voteClicks$ = rxjs.fromEvent(voteButton, "click");
 const voteCancelClicks$ = rxjs.fromEvent(voteCancelButton, "click");
 
 const settingsClicks$ = rxjs.fromEvent(settingsButton, "click");
+const settingsApplyClicks$ = rxjs.fromEvent(applySettingsButton, "click");
+const settingsCancelClicks$ = rxjs.fromEvent(cancelSettingsButton, "click");
 
 const newPointCoords$ = rxjs
   .merge(
@@ -390,6 +398,27 @@ const selectedPoint$ = placemarks$.pipe(
   rxjs.mergeAll()
 );
 
+const settingPaneVisible$ = rxjs
+  .merge(
+    settingsClicks$.pipe(rxjs.map(() => ({ action: "toggle" }))),
+    settingsCancelClicks$.pipe(rxjs.map(() => ({ action: "cancel" }))),
+    settingsApplyClicks$.pipe(rxjs.map(() => ({ action: "apply" })))
+  )
+  .pipe(
+    rxjs.scan((visible, { action }) => {
+      if (action === "toggle") {
+        return !visible;
+      }
+      if (action === "cancel" || action === "apply") {
+        return false;
+      }
+
+      return visible;
+    }, false),
+    rxjs.startsWith(false),
+    rxjs.shareReplay(1)
+  );
+
 const alerts$ = rxjs
   .merge(
     pointAppended$.pipe(
@@ -403,6 +432,12 @@ const alerts$ = rxjs
     )
   )
   .pipe(rxjs.share());
+
+settingPaneVisible$.subscribe((visible) =>
+  visible
+    ? settingsPane.classList.add("visible")
+    : settingsPane.classList.remove("visible")
+);
 
 user$.subscribe(function ({ isAuthorized, first_name, last_name }) {
   userInfo.innerHTML = isAuthorized
