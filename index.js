@@ -6,6 +6,7 @@ import { config } from "dotenv";
 import ipc from "node-ipc";
 import set from "lodash/set.js";
 import get from "lodash/get.js";
+import pick from "lodash/pick.js";
 import path from "path";
 import TelegramBot from "node-telegram-bot-api";
 import Piscina from "piscina";
@@ -56,8 +57,10 @@ class ApiChannel {
       ids
         .map(([id, distance]) => [liveWatches[id], distance])
         .filter(([spec]) => Boolean(spec))
-        .map(([{ chat, message }, distance]) =>
-          notifyListener(message, chat, [{ point, distance }])
+        .map(([{ chat, message, latitude, longitude }, distance]) =>
+          notifyListener(message, chat, latitude, longitude, [
+            { point, distance },
+          ])
         )
     );
   }
@@ -287,6 +290,12 @@ function getNearbyPointsButtons(id, nearbyPoints) {
     ]),
     [
       {
+        text: "Показать все почты по близости",
+        callback_data: JSON.stringify({ points: "all" }),
+      },
+    ],
+    [
+      {
         text: "Открыть карту",
         web_app: {
           url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
@@ -308,9 +317,80 @@ function getLiveLocationTimeoutCleaner(id) {
   }, liveLocationTimeout);
 }
 
+async function showAllNearbyPoints(chatId, messageId) {
+  if (liveWatches[messageId]) {
+    const resetData = pick(
+      liveWatches[messageId],
+      "chat",
+      "message",
+      "latitude",
+      "longitude"
+    );
+
+    if (liveWatches[messageId].timer) {
+      clearTimeout(liveWatches[messageId].timer);
+    }
+
+    liveWatches[messageId] = resetData;
+
+    await updateListenerLocation({
+      message_id: messageId,
+      chat: { id: chatId },
+      location: { latitude, longitude },
+    });
+  }
+}
+
+async function showPointDetails(pointId, chatId, messageId) {
+  const point = await apiChannel.getPointById(pointId);
+
+  if (point === null) {
+    return bot.sendMessage(
+      chatId,
+      "Точка не найдена. Возможно, она была удалена.",
+      {
+        reply_to_message_id: messageId,
+      }
+    );
+  }
+
+  await bot.sendLocation(chatId, point.latitude, point.longitude, {
+    reply_to_message_id: messageId,
+  });
+
+  await bot.sendMessage(
+    chatId,
+    [
+      [
+        "Координаты",
+        `${point.latitude.toPrecision(6)}, ${point.longitude.toPrecision(6)}`,
+      ],
+      ["Статус", PointStatusDescription[point.status]],
+      ["Медицинская служба", point.medical ? "Присутствует" : "Отсутствует"],
+      ["Количество подтверждений", `${point.votes.length}`],
+      [
+        "Последнее подтверждение",
+        point.votedAt ? relativeTime.format(point.votedAt) : null,
+      ],
+      ["Описание", point.description],
+      ["Создана", relativeTime.format(point.createdAt)],
+      ["Автор", point.createdBy],
+    ]
+      .filter(([_, text]) => Boolean(text))
+      .map(([header, text]) => `*${header}*\n${text}`)
+      .join("\n\n"),
+    {
+      parse_mode: "Markdown",
+      reply_to_message_id: messageId,
+    }
+  );
+}
+
 async function notifyListener(
   messageId,
   chatId,
+  latitude,
+  longitude,
   allNearbyPoints = [],
   error = false
 ) {
@@ -318,6 +398,8 @@ async function notifyListener(
     liveWatches[messageId] = {
       chat: chatId,
       message: messageId,
+      latitude,
+      longitude,
     };
   }
 
@@ -384,6 +466,8 @@ async function updateListenerLocation({
     await notifyListener(
       message_id,
       id,
+      latitude,
+      longitude,
       await apiChannel.getNearbyPoints(
         latitude,
         longitude,
@@ -394,7 +478,7 @@ async function updateListenerLocation({
       false
     );
   } catch (error) {
-    await notifyListener(message_id, id, [], true);
+    await notifyListener(message_id, id, latitude, longitude, [], true);
   }
 }
 
@@ -440,7 +524,7 @@ async function handleNearbyPointsRequest(message) {
   if (message.location.live_period) {
     await updateListenerLocation(message);
   } else if (liveWatches[message.message_id]) {
-    await clearLiveLocation(message.message_id);
+    clearLiveLocation(message.message_id);
   } else {
     await sendNearbyPoints(message);
   }
@@ -665,55 +749,13 @@ bot.on(
     },
     data,
   }) => {
-    try {
-      const point = await apiChannel.getPointById(JSON.parse(data).point);
+    const query = JSON.parse(data);
 
-      if (point === null) {
-        return bot.sendMessage(
-          id,
-          "Точка не найдена. Возможно, она была удалена.",
-          {
-            reply_to_message_id: message_id,
-          }
-        );
-      }
-
-      await bot.sendLocation(id, point.latitude, point.longitude, {
-        reply_to_message_id: message_id,
-      });
-
-      await bot.sendMessage(
-        id,
-        [
-          [
-            "Координаты",
-            `${point.latitude.toPrecision(6)}, ${point.longitude.toPrecision(
-              6
-            )}`,
-          ],
-          ["Статус", PointStatusDescription[point.status]],
-          [
-            "Медицинская служба",
-            point.medical ? "Присутствует" : "Отсутствует",
-          ],
-          ["Количество подтверждений", `${point.votes.length}`],
-          [
-            "Последнее подтверждение",
-            point.votedAt ? relativeTime.format(point.votedAt) : null,
-          ],
-          ["Описание", point.description],
-          ["Создана", relativeTime.format(point.createdAt)],
-          ["Автор", point.createdBy],
-        ]
-          .filter(([_, text]) => Boolean(text))
-          .map(([header, text]) => `*${header}*\n${text}`)
-          .join("\n\n"),
-        {
-          parse_mode: "Markdown",
-          reply_to_message_id: message_id,
-        }
-      );
-    } catch (error) {}
+    if (query.point) {
+      await showPointDetails(query.point, id, message_id);
+    } else if (query.points === "all") {
+      await showAllNearbyPoints(id, message_id);
+    }
   }
 );
 
