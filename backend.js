@@ -483,7 +483,7 @@ function setupApiChannel() {
         .pipe(rxjs.map((message) => [socket, message]))
     ),
     rxjs.switchAll(),
-    rxjs.share(),
+    rxjs.share()
   );
 
   rxjs
@@ -526,7 +526,7 @@ function setupApiChannel() {
     .pipe(
       rxjs.scan(
         (state, action) => {
-		//console.log('scan', state, action)
+          //console.log('scan', state, action)
           if (action.type === "socket") {
             return {
               ...state,

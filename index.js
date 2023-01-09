@@ -56,7 +56,9 @@ class ApiChannel {
       ids
         .map(([id, distance]) => [liveWatches[id], distance])
         .filter(([spec]) => Boolean(spec))
-        .map(([{ chat, message }, distance]) => notifyListener(message, chat, [{ point, distance }]))
+        .map(([{ chat, message }, distance]) =>
+          notifyListener(message, chat, [{ point, distance }])
+        )
     );
   }
 
@@ -291,11 +293,15 @@ function getNearbyPointsButtons(id, nearbyPoints) {
   ];
 }
 
+async function clearLiveLocation(id) {
+  console.log("deleted live watch", id);
+  delete liveWatches[id];
+  await apiChannel.stopNearbyPointsNotifications(id);
+}
+
 function getLiveLocationTimeoutCleaner(id) {
   return setTimeout(function () {
-    console.log("deleted live watch", id);
-    delete liveWatches[id];
-    apiChannel.stopNearbyPointsNotifications(id);
+    clearLiveLocation();
   }, liveLocationTimeout);
 }
 
@@ -430,6 +436,8 @@ async function sendNearbyPoints(message) {
 async function handleNearbyPointsRequest(message) {
   if (message.location.live_period) {
     await updateListenerLocation(message);
+  } else if (liveWatches[message.message_id]) {
+    await clearLiveLocation(message.message_id);
   } else {
     await sendNearbyPoints(message);
   }
