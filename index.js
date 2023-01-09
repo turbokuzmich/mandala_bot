@@ -305,14 +305,12 @@ async function sendClosestPointIfNeeded(message) {
       : allNearbyPoints;
 
     if (nearbyPoints.length > 0) {
-      if (!isLiveMessage || lastLiveMessageType !== "points") {
-        await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
-          reply_to_message_id: message_id,
-          reply_markup: {
-            inline_keyboard: getNearbyPointsButtons(id, nearbyPoints),
-          },
-        });
-      }
+      await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
+        reply_to_message_id: message_id,
+        reply_markup: {
+          inline_keyboard: getNearbyPointsButtons(id, nearbyPoints),
+        },
+      });
 
       if (isLiveMessage) {
         set(liveWatches, [message_id, "lastMessageType"], "points");
@@ -337,7 +335,6 @@ async function sendClosestPointIfNeeded(message) {
       }
     }
   } catch (error) {
-    console.log(error);
     if (!isLiveMessage || lastLiveMessageType !== "error") {
       await bot.sendMessage(
         id,
