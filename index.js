@@ -293,8 +293,8 @@ function getNearbyPointsText(nearbyPoints, asNewPoints = false) {
     : `Рядом с вами ${found} ${nearbyPoints.length} ${post} ДПС`;
 }
 
-function getNearbyPointsButtons(id, nearbyPoints) {
-  return [
+function getNearbyPointsButtons(id, nearbyPoints, onlyPointsButtons = false) {
+  const pointsButtons = [
     ...nearbyPoints.map(({ point, distance }) => [
       {
         text: `${Math.floor(distance)} ${plural(
@@ -308,21 +308,27 @@ function getNearbyPointsButtons(id, nearbyPoints) {
         callback_data: JSON.stringify({ point: point.id }),
       },
     ]),
-    [
-      {
-        text: "Показать все посты поблизости",
-        callback_data: JSON.stringify({ points: "all" }),
-      },
-    ],
-    [
-      {
-        text: "Открыть карту",
-        web_app: {
-          url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
-        },
-      },
-    ],
   ];
+
+  return onlyPointsButtons
+    ? pointsButtons
+    : [
+        ...pointsButtons,
+        [
+          {
+            text: "Показать все посты поблизости",
+            callback_data: JSON.stringify({ points: "all" }),
+          },
+        ],
+        [
+          {
+            text: "Открыть карту",
+            web_app: {
+              url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
+            },
+          },
+        ],
+      ];
 }
 
 function clearLiveLocation(id) {
@@ -337,12 +343,19 @@ function getLiveLocationTimeoutCleaner(id) {
   }, liveLocationTimeout);
 }
 
-async function listAllNearbyPoints(chatId, messageId, latitude, longitude) {
-  await sendNearbyPoints({
-    message_id: messageId,
-    chat: { id: chatId },
-    location: { latitude, longitude },
-  });
+async function listAllNearbyPoints(chatId) {
+  const messageId = Object.keys(liveWatches).find(
+    (id) => liveWatches[id].chat === chatId
+  );
+
+  if (messageId) {
+    const data = liveWatches[messageId];
+
+    await sendNearbyPoints({
+      chat: { id: chatId },
+      location: pick(data, "latitude", "longitude"),
+    });
+  }
 }
 
 async function showPointDetails(pointId, chatId, messageId) {
@@ -489,7 +502,11 @@ async function sendNearbyPoints(message) {
     );
 
     if (nearbyPoints.length > 0) {
-      await bot.sendMessage(id, getNearbyPointsText(nearbyPoints));
+      await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
+        reply_markup: {
+          inline_keyboard: getNearbyPointsButtons(id, nearbyPoints, true),
+        },
+      });
     } else {
       await bot.sendMessage(id, "Рядом с вами нет постов");
     }
@@ -723,7 +740,6 @@ bot.on("callback_query", async (callback) => {
     message: {
       chat: { id },
       message_id,
-      reply_to_message,
     },
     data,
   } = callback;
@@ -732,13 +748,8 @@ bot.on("callback_query", async (callback) => {
 
   if (query.point) {
     await showPointDetails(query.point, id, message_id);
-  } else if (query.points === "all" && get(reply_to_message, "location")) {
-    await listAllNearbyPoints(
-      id,
-      message_id,
-      get(reply_to_message, ["location", "latitude"]),
-      get(reply_to_message, ["location", "longitude"])
-    );
+  } else if (query.points === "all") {
+    await listAllNearbyPoints(id);
   }
 });
 
