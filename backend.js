@@ -483,7 +483,7 @@ function setupApiChannel() {
         .pipe(rxjs.map((message) => [socket, message]))
     ),
     rxjs.switchAll(),
-    rxjs.share()
+    rxjs.share(),
   );
 
   rxjs
@@ -491,7 +491,7 @@ function setupApiChannel() {
       IPCClient$.pipe(rxjs.map((socket) => ({ type: "socket", socket }))),
       socketMessage$.pipe(
         rxjs.filter(
-          (_, message) =>
+          ([_, message]) =>
             message.method === "getNearbyPoints" && message.params.id
         ),
         rxjs.map(
@@ -526,6 +526,7 @@ function setupApiChannel() {
     .pipe(
       rxjs.scan(
         (state, action) => {
+		//console.log('scan', state, action)
           if (action.type === "socket") {
             return {
               ...state,
@@ -576,9 +577,13 @@ function setupApiChannel() {
               latitude: document.latitude,
               longitude: document.longitude,
               listeners: Object.keys(listeners).reduce(
-                (listeners, id) => ({
-                  ...listeners,
-                  [id]: { latitude, longitude, distance },
+                (spec, id) => ({
+                  ...spec,
+                  [id]: {
+                    latitude: listeners[id].latitude,
+                    longitude: listeners[id].longitude,
+                    distance: listeners[id].distance,
+                  },
                 }),
                 {}
               ),

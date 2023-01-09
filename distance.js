@@ -41,15 +41,16 @@ function getNearbyPoints({ latitude, longitude, points, distance }) {
 }
 
 function getNearbyListeners({ latitude, longitude, listeners }) {
-  return Object.keys(listeners).filter(
-    (id) =>
-      getDistance(
-        latitude,
-        longitude,
-        listeners[id].latitude,
-        listeners[id].longitude
-      ) <= listeners[id].distance
-  );
+	return Object.keys(listeners).reduce((result, id) => {
+		const distanceToPoint = getDistance(
+			latitude,
+			longitude,
+			listeners[id].latitude,
+			listeners[id].longitude
+		      );
+
+		return distanceToPoint > listeners[id].distance ? result : [...result, [id, distanceToPoint]];
+	}, []);
 }
 
 export default function ({ type, ...params }) {

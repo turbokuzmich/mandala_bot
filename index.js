@@ -54,9 +54,9 @@ class ApiChannel {
   async notifyListenersOfNewNearbyPoint(ids, point) {
     await Promise.all(
       ids
-        .map((id) => liveWatches[id])
-        .filter(Boolean)
-        .map(({ chat, message }) => notifyListener(message, chat, [point]))
+        .map(([id, distance]) => [liveWatches[id], distance])
+        .filter(([spec]) => Boolean(spec))
+        .map(([{ chat, message }, distance]) => notifyListener(message, chat, [{ point, distance }]))
     );
   }
 
@@ -95,11 +95,14 @@ class ApiChannel {
         switch (message.method) {
           case "getChatById":
             await this.sendChat(message.chatId, message.requestId);
-          case "notifyNearby":
+            break;
+          case "notifyNearby": {
             await this.notifyListenersOfNewNearbyPoint(
               message.ids,
               message.point
             );
+            break;
+          }
         }
       });
     });
