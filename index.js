@@ -1,4 +1,7 @@
 import { writeFile } from "fs/promises";
+import { v4 as uuid } from "uuid";
+import TimeAgo from "javascript-time-ago";
+import TimeAgoRuLocale from "javascript-time-ago/locale/ru";
 import { config } from "dotenv";
 import ipc from "node-ipc";
 import path from "path";
@@ -6,15 +9,127 @@ import TelegramBot from "node-telegram-bot-api";
 import Piscina from "piscina";
 import AbortController from "abort-controller";
 import timeout from "p-timeout";
+import plural from "plural-ru";
 import {
   ipcId,
+  watchDistance,
   ipcMessageName,
+  PointStatusDescription,
   CalculationStatus,
   calculationTimeout,
   ResultFormat,
+  ipcResponseTimeout,
 } from "./constants.js";
 
 config();
+
+TimeAgo.addDefaultLocale(TimeAgoRuLocale);
+
+const relativeTime = new TimeAgo();
+
+class ApiChannel {
+  _socket = null;
+
+  ipc = null;
+  ipcId = null;
+  messageId = null;
+
+  constructor(ipc, ipcId, messageId) {
+    this.ipc = ipc;
+    this.ipcId = ipcId;
+    this.messageId = messageId;
+  }
+
+  async sendChat(chatId, requestId) {
+    try {
+      this._respond({ requestId, chat: await bot.getChat(chatId) });
+    } catch (error) {
+      this._respond({ requestId, error: "Failed to fetch chat" });
+    }
+  }
+
+  getNearbyPoints(latitude, longitude, distance) {
+    return this._request("getNearbyPoints", { latitude, longitude, distance });
+  }
+
+  getPointById(id) {
+    return this._request("getPointById", { id });
+  }
+
+  listen() {
+    this.ipc.config.id = this.ipcId;
+    this.ipc.config.silent = true;
+    this.ipc.config.retry = 1500;
+
+    this.ipc.serve(() => {
+      this.ipc.server.on("connect", (socket) => {
+        console.log("api socket connected");
+        this._socket = socket;
+      });
+      this.ipc.server.on("socket.disconnected", () => {
+        console.log("api socket disconnected");
+        this._socket = null;
+      });
+      this.ipc.server.on(this.messageId, async (message) => {
+        switch (message.method) {
+          case "getChatById":
+            await this.sendChat(message.chatId, message.requestId);
+        }
+      });
+    });
+
+    this.ipc.server.start();
+  }
+
+  _request(method, params) {
+    return new Promise((resolve, reject) => {
+      const { ipc, messageId } = this;
+      const timer = setTimeout(onTimeout, ipcResponseTimeout);
+      const requestId = uuid();
+
+      function cleanUp() {
+        clearTimeout(timer);
+        ipc.server.off(messageId, onMessage);
+      }
+
+      function onTimeout() {
+        cleanUp();
+        reject("ApiChannel timed out");
+      }
+
+      function onMessage(message) {
+        if (message.requestId === requestId) {
+          cleanUp();
+
+          if (message.error) {
+            reject(message.error);
+          } else {
+            resolve(message.data);
+          }
+        }
+      }
+
+      this.ipc.server.on(this.messageId, onMessage);
+
+      if (!this._respond({ method, params, requestId })) {
+        Promise.resolve().then(() => {
+          cleanUp();
+          reject("No ApiChannel connection");
+        });
+      }
+    });
+  }
+
+  _respond(data) {
+    if (this._socket) {
+      this.ipc.server.emit(this._socket, ipcMessageName, data);
+
+      return true;
+    }
+
+    return false;
+  }
+}
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -63,6 +178,8 @@ const bot = new TelegramBot(
   isProduction ? { webHook: { port: 8444 } } : { polling: true }
 );
 
+const apiChannel = new ApiChannel(ipc, ipcId, ipcMessageName);
+
 async function sendCalculationImage(chat, message, result) {
   if (
     !(
@@ -105,6 +222,76 @@ async function sendCalculationImage(chat, message, result) {
     );
   } catch (error) {
     console.log("fock", error);
+  }
+}
+
+async function sendClosestPointIfNeeded(message) {
+  const {
+    message_id,
+    chat: { id },
+    location: { latitude, longitude },
+  } = message;
+
+  try {
+    const info = await apiChannel.getNearbyPoints(
+      latitude,
+      longitude,
+      // FIXME это убрать в настройки
+      watchDistance
+    );
+
+    if (info.length > 0) {
+      await bot.sendMessage(
+        id,
+        `Рядок с вами найдено ${info.length} ${plural(
+          info.length,
+          "точка",
+          "точки",
+          "точек"
+        )}`,
+        {
+          reply_to_message_id: message_id,
+          reply_markup: {
+            inline_keyboard: [
+              ...info.map(({ point, distance }) => [
+                {
+                  text: `${Math.floor(distance)} ${plural(
+                    Math.floor(distance),
+                    "метр",
+                    "метра",
+                    "метров"
+                  )}. ${PointStatusDescription[point.status]}. ${
+                    point.medical ? "Медслужба" : ""
+                  }`,
+                  callback_data: JSON.stringify({ point: point.id }),
+                },
+              ]),
+              [
+                {
+                  text: "Открыть карту",
+                  web_app: {
+                    url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
+                  },
+                },
+              ],
+            ],
+          },
+        }
+      );
+    } else {
+      await bot.sendMessage(id, "Рядом с вами нет постов", {
+        reply_to_message_id: message_id,
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    await bot.sendMessage(
+      id,
+      "Не удалось получить информацию о ближайших постах",
+      {
+        reply_to_message_id: message_id,
+      }
+    );
   }
 }
 
@@ -225,13 +412,16 @@ bot.onText(commandRegExps.map, async function (message) {
     {
       reply_to_message_id: message_id,
       reply_markup: {
+        one_time_keyboard: true,
         keyboard: [
           [
             {
               text: "Открыть карту",
-              web_app: {
-                url: `https://m.deluxspa.ru/web_app?chat_id=${id}`,
-              },
+              web_app: { url: `https://m.deluxspa.ru/web_app?chat_id=${id}` },
+            },
+            {
+              text: "Включить оповещение",
+              request_location: true,
             },
           ],
         ],
@@ -283,13 +473,17 @@ bot.on("message", async function (message) {
     chat: { id },
     text,
     web_app_data,
+    location,
   } = message;
+  // console.log(message);
 
   if (mandalaRequests.has(id)) {
     runCalculation(id, message_id, text);
     mandalaRequests.delete(id);
   } else if (web_app_data) {
     console.log(web_app_data);
+  } else if (location) {
+    await sendClosestPointIfNeeded(message);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
     await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
       reply_to_message_id: message_id,
@@ -309,35 +503,70 @@ bot.on("webhook_error", (error) => {
   console.log("Webhook error", error);
 });
 
-function startIpcServer() {
-  ipc.config.id = ipcId;
-  ipc.config.silent = true;
-  ipc.config.retry = 1500;
+bot.on("edited_message", async (message) => {
+  if (message.location) {
+    await sendClosestPointIfNeeded(message);
+  }
+});
 
-  ipc.serve(() =>
-    ipc.server.on(
-      ipcMessageName,
-      async function ({ request_id, chat_id }, socket) {
-        console.log('request', request_id, chat_id)
-        try {
-          const { username } = await bot.getChat(chat_id);
+bot.on(
+  "callback_query",
+  async ({
+    message: {
+      chat: { id },
+      message_id,
+    },
+    data,
+  }) => {
+    try {
+      const point = await apiChannel.getPointById(JSON.parse(data).point);
 
-          ipc.server.emit(socket, ipcMessageName, { request_id, username });
-        } catch (error) {
-          ipc.server.emit(socket, ipcMessageName, {
-            request_id,
-            error: "Failed to fetch username",
-          });
-        }
+      if (point === null) {
+        return bot.sendMessage(
+          id,
+          "Точка не найдена. Возможно, она была удалена.",
+          {
+            reply_to_message_id: message_id,
+          }
+        );
       }
-    )
-  );
 
-  ipc.server.start();
-}
+      await bot.sendLocation(id, point.latitude, point.longitude, {
+        reply_to_message_id: message_id,
+      });
+
+      await bot.sendMessage(
+        id,
+        [
+          ["Координаты", `${point.latitude}, ${point.longitude}`],
+          ["Статус", PointStatusDescription[point.status]],
+          [
+            "Медицинская служба",
+            point.medical ? "Присутствует" : "Отсутствует",
+          ],
+          ["Количество подтверждений", `${point.votes.length}`],
+          [
+            "Последнее подтверждение",
+            point.votedAt ? relativeTime.format(point.votedAt) : null,
+          ],
+          ["Описание", point.description],
+          ["Создана", relativeTime.format(point.createdAt)],
+          ["Автор", point.createdBy],
+        ]
+          .filter(([_, text]) => Boolean(text))
+          .map(([header, text]) => `*${header}*\n${text}`)
+          .join("\n\n"),
+        {
+          parse_mode: "Markdown",
+          reply_to_message_id: message_id,
+        }
+      );
+    } catch (error) {}
+  }
+);
 
 async function main() {
-  startIpcServer();
+  apiChannel.listen();
 
   await bot.setMyCommands(botCommands);
 

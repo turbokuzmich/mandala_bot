@@ -7,21 +7,15 @@ import ipc from "node-ipc";
 import * as rxjs from "rxjs";
 import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
-import { ipcId, ipcMessageName } from "./constants.js";
+import {
+  ipcId,
+  ipcMessageName,
+  ipcResponseTimeout,
+  PointStatus,
+} from "./constants.js";
 
 const sec = (value = 1) => value * 1000;
 const min = (value = 1) => value * sec(60);
-
-/**
- * @readonly
- * @enum {string}
- */
-const PointStatus = {
-  created: "created",
-  voted: "voted",
-  unvotedWeak: "unvoted-weak",
-  unvotedStrong: "unvoted-strong",
-};
 
 const POINT_TIMEOUTS = {
   [PointStatus.created]: min(),
@@ -41,7 +35,7 @@ function connectToIPC(ipc, to) {
 
     ipc.connectTo(to, function () {
       if (isSubscribed) {
-        subscriber.next(ipc);
+        subscriber.next(ipc.of[to]);
         subscriber.complete();
       }
     });
@@ -64,23 +58,23 @@ const IPCClient$ = rxjs.of(ipc).pipe(
   rxjs.shareReplay(1)
 );
 
-function getUsernameByChatId(id, timeout = 2000) {
+function getUsernameByChatId(id, timeout = ipcResponseTimeout) {
   return IPCClient$.pipe(
-    rxjs.map((ipc) => {
+    rxjs.map((socket) => {
       return new rxjs.Observable((subscriber) => {
-        const requestId = uuid();
+        const chatRequestId = uuid();
         const timeoutHandler = setTimeout(onTimeout, timeout);
 
         function onTimeout() {
-          ipc.of[ipcId].off(ipcMessageName, onMessage);
+          socket.off(ipcMessageName, onMessage);
 
           subscriber.error("request timed out");
         }
 
-        function onMessage({ request_id, error, username }) {
-          if (request_id === requestId) {
+        function onMessage({ requestId, error, chat: { username } }) {
+          if (requestId === chatRequestId) {
             clearTimeout(timeoutHandler);
-            ipc.of[ipcId].off(ipcMessageName, onMessage);
+            socket.off(ipcMessageName, onMessage);
 
             if (error) {
               subscriber.error(error);
@@ -91,16 +85,17 @@ function getUsernameByChatId(id, timeout = 2000) {
           }
         }
 
-        ipc.of[ipcId].on(ipcMessageName, onMessage);
+        socket.on(ipcMessageName, onMessage);
 
-        ipc.of[ipcId].emit(ipcMessageName, {
-          request_id: requestId,
-          chat_id: id,
+        socket.emit(ipcMessageName, {
+          chatId: id,
+          method: "getChatById",
+          requestId: chatRequestId,
         });
 
         return () => {
           clearTimeout(timeoutHandler);
-          ipc.of[ipcId].off(ipcMessageName, onMessage);
+          socket.off(ipcMessageName, onMessage);
         };
       });
     }),
@@ -452,11 +447,117 @@ function setupWebsocket() {
   });
 }
 
+function getDistance(lat1, lon1, lat2, lon2) {
+  if (lat1 == lat2 && lon1 == lon2) {
+    return 0;
+  } else {
+    const radlat1 = (Math.PI * lat1) / 180;
+    const radlat2 = (Math.PI * lat2) / 180;
+    const theta = lon1 - lon2;
+    const radtheta = (Math.PI * theta) / 180;
+
+    let dist =
+      Math.sin(radlat1) * Math.sin(radlat2) +
+      Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
+
+    if (dist > 1) {
+      dist = 1;
+    }
+
+    dist = Math.acos(dist);
+    dist = (dist * 180) / Math.PI;
+    dist = dist * 60 * 1.1515;
+
+    return dist * 1.609344 * 1000;
+  }
+}
+
+async function getNearbyPoints({ latitude, longitude, distance }) {
+  // FIXME worker thread
+  const points = await db.points.find().exec();
+
+  return {
+    data: points
+      .reduce((points, point) => {
+        const distanceToPoint = getDistance(
+          latitude,
+          longitude,
+          point.get("latitude"),
+          point.get("longitude")
+        );
+
+        return distanceToPoint > distance
+          ? points
+          : [...points, { point: point.toJSON(), distance: distanceToPoint }];
+      }, [])
+      .sort((pointA, pointB) => pointA.distance - pointB.distance),
+  };
+}
+
+async function getPointById({ id }) {
+  const point = await db.points.findOne(id).exec();
+
+  return { data: point === null ? null : point.toJSON() };
+}
+
+function setupApiChannel() {
+  // TODO handle disconnections and retries
+  // const disconnect$ = IPCClient$.pipe(
+  //   rxjs.map((ipc) => rxjs.fromEvent(ipc.of[ipcId], "disconnect")),
+  //   rxjs.switchAll()
+  // );
+
+  IPCClient$.pipe(
+    rxjs.map((socket) =>
+      rxjs
+        .fromEvent(socket, ipcMessageName)
+        .pipe(rxjs.map((message) => [socket, message]))
+    ),
+    rxjs.switchAll(),
+    rxjs.map(([socket, message]) => {
+      switch (message.method) {
+        case "getNearbyPoints":
+          return rxjs.from(getNearbyPoints(message.params)).pipe(
+            rxjs.timeout({ first: ipcResponseTimeout }),
+            rxjs.map((response) => [socket, message, response]),
+            rxjs.catchError(() =>
+              rxjs.of([
+                socket,
+                message,
+                { error: "Failed to get nearby points" },
+              ])
+            )
+          );
+        case "getPointById":
+          return rxjs.from(getPointById(message.params)).pipe(
+            rxjs.timeout({ first: ipcResponseTimeout }),
+            rxjs.map((response) => [socket, message, response]),
+            rxjs.catchError(() =>
+              rxjs.of([socket, message, { error: "Failed to get point" }])
+            )
+          );
+        default:
+          return rxjs.EMPTY;
+      }
+    }),
+    rxjs.mergeAll()
+  ).subscribe(([socket, { requestId }, { error, data }]) => {
+    if (error) {
+      socket.emit(ipcMessageName, { requestId, error });
+    } else {
+      socket.emit(ipcMessageName, { requestId, data });
+    }
+  });
+}
+
 async function main() {
   try {
-    await apiServer.listen({ port: process.env.BACKEND_PORT });
+    const address = await apiServer.listen({ port: process.env.BACKEND_PORT });
+    console.log("listening to", address);
+
     startPointsChecker();
     setupWebsocket();
+    setupApiChannel();
   } catch (error) {
     console.log("failed to listen", error, process.env.BACKEND_PORT);
   }

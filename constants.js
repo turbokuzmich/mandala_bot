@@ -24,9 +24,25 @@ export const base = 9;
 export const mandalaBlockSize = 30;
 export const mandalaBlocksCount = 16;
 export const mandalaPadding = 70;
+export const watchDistance = 500;
+
+export const PointStatus = {
+  created: "created",
+  voted: "voted",
+  unvotedWeak: "unvoted-weak",
+  unvotedStrong: "unvoted-strong",
+};
+
+export const PointStatusDescription = {
+  [PointStatus.created]: "Недавно создана",
+  [PointStatus.voted]: "Подтверждена",
+  [PointStatus.unvotedWeak]: "Без подтверждений",
+  [PointStatus.unvotedStrong]: "Давно без подтверждений",
+};
 
 export const ipcId = "mandala_bot_ipc_channel";
 export const ipcMessageName = "mandala_bot_ipc_message";
+export const ipcResponseTimeout = 2000;
 
 export const colorBlack = Color({ r: 0, g: 0, b: 0 });
 

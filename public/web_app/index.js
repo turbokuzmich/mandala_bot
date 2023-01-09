@@ -122,7 +122,7 @@ const geolocation$ = rxjs.combineLatest([ymaps$, map$]).pipe(
 
 const mapClicks$ = map$.pipe(
   rxjs.mergeMap((map) => fromYMapsEvents(map, "click")),
-  rxjs.shareReplay(1)
+  rxjs.share(1)
 );
 
 const balloonOpens$ = map$.pipe(
