@@ -38,8 +38,8 @@ export const PointStatus = {
 };
 
 export const PointStatusDescription = {
-  [PointStatus.created]: "Недавно создана",
-  [PointStatus.voted]: "Подтверждена",
+  [PointStatus.created]: "Приехал недавно",
+  [PointStatus.voted]: "Подтвержден",
   [PointStatus.unvotedWeak]: "Без подтверждений",
   [PointStatus.unvotedStrong]: "Давно без подтверждений",
 };

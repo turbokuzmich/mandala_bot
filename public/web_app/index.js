@@ -296,7 +296,7 @@ function renderPointBallonBody(point) {
   const parts = [];
 
   parts.push(
-    `<p>Создана ${getRelativeTimeFormatter().format(point.createdAt)} (${moment(
+    `<p>Замечен ${getRelativeTimeFormatter().format(point.createdAt)} (${moment(
       point.createdAt
     ).format("HH:mm DD.MM.YYYY")})<br />Добавил ${point.createdBy}`
   );
@@ -313,7 +313,7 @@ function renderPointBallonBody(point) {
     parts.push("<p>Подтверждений пока нет</p>");
   } else if (point.status === "voted") {
     parts.push(
-      `<p>Подтверждена ${getRelativeTimeFormatter().format(
+      `<p>Подтвержден ${getRelativeTimeFormatter().format(
         point.votedAt
       )} (${moment(point.votedAt).format("HH:mm DD.MM.YYYY")})</p>`
     );
