@@ -84,6 +84,7 @@ function get$(...args) {
   return request$("get", ...args);
 }
 
+// FIXME CSRF token
 function post$(...args) {
   return request$("post", ...args);
 }
@@ -167,7 +168,7 @@ const settingsClicks$ = rxjs.fromEvent(settingsButton, "click");
 const settingsApplyClicks$ = rxjs.fromEvent(applySettingsButton, "click");
 const settingsCancelClicks$ = rxjs.fromEvent(cancelSettingsButton, "click");
 
-const distanceChanges$ = rxjs.fromEvent(distanceSetting, "change");
+const distanceChanges$ = rxjs.fromEvent(distanceSetting, "input");
 
 const newPointCoords$ = rxjs
   .merge(
@@ -225,6 +226,19 @@ const settings$ = chatId$.pipe(
     )
   ),
   rxjs.shareReplay(1)
+);
+
+const settingsUpdated$ = chatId$.pipe(
+  rxjs.switchMap((chatId) =>
+    settingsApplyClicks$.pipe(rxjs.map(() => [chatId, distanceSetting.value]))
+  ),
+  rxjs.switchMap(([chatId, distance]) =>
+    post$("/settings", { chatId, distance }).pipe(
+      rxjs.map(({ distance }) => ({ distance })),
+      rxjs.catchError(() => rxjs.of({ distance }))
+    )
+  ),
+  rxjs.replay()
 );
 
 const socketMessage$ = user$.pipe(
@@ -467,6 +481,7 @@ settingPaneVisible$.subscribe((visible) =>
 rxjs
   .merge(
     settings$.pipe(rxjs.map(({ distance }) => distance)),
+    settingsUpdated$.pipe(rxjs.map(({ distance }) => distance)),
     distanceChanges$.pipe(rxjs.map(() => distanceSetting.value))
   )
   .subscribe((distance) => {

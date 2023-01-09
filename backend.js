@@ -290,6 +290,57 @@ apiServer.get(
   }
 );
 
+const settingsUpdateSchema = {
+  type: "object",
+  required: ["chatId", "distance"],
+  properties: {
+    chatId: { type: "number" },
+    distance: { type: "number" },
+  },
+};
+
+apiServer.post(
+  "/api/settings",
+  {
+    schema: { body: settingsUpdateSchema },
+  },
+  async function (request) {
+    const existing = await db.settings
+      .findOne({
+        selector: {
+          chatId: { $eq: request.body.chatId },
+        },
+      })
+      .exec();
+
+    if (existing) {
+      await existing
+        .update({
+          $set: {
+            distance: request.body.distance,
+          },
+        })
+        .exec();
+    } else {
+      await db.settings.upsert({
+        id: uuid(),
+        chatId: request.body.chatId,
+        distance: request.body.distance,
+      });
+    }
+
+    const current = await db.settings
+      .findOne({
+        selector: {
+          chatId: { $eq: request.body.chatId },
+        },
+      })
+      .exec();
+
+    return { status: "success", distance: current.get("distance") };
+  }
+);
+
 const pointCreateSchema = {
   type: "object",
   required: ["latitude", "longitude", "user"],
