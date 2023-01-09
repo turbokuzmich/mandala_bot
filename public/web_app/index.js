@@ -185,18 +185,36 @@ const cluster$ = rxjs.combineLatest([ymaps$, map$]).pipe(
   })
 );
 
+const chatId$ = rxjs
+  .of(new URL(location.href).searchParams.get("chat_id"))
+  .pipe(rxjs.shareReplay(1));
+
 const user$ = ymaps$.pipe(
-  rxjs.map(() => new URL(location.href).searchParams.get("chat_id")),
-  rxjs.mergeMap((chatId) =>
+  rxjs.switchMap(() => chatId$),
+  rxjs.switchMap((chatId) =>
     get$("/me", {
       params: {
         chat_id: chatId,
       },
     }).pipe(
-      rxjs.map((user) => ({ ...user.user, isAuthorized: true })),
+      rxjs.map(({ user }) => ({ ...user, isAuthorized: true })),
       rxjs.catchError(() =>
         rxjs.of({ isAuthorized: false, id: 0, first_name: "Гость" })
       )
+    )
+  ),
+  rxjs.shareReplay(1)
+);
+
+const settings$ = chatId$.pipe(
+  rxjs.switchMap((chatId) =>
+    get$("/settings", {
+      params: {
+        chat_id: chatId,
+      },
+    }).pipe(
+      rxjs.map(({ distance }) => ({ distance })),
+      rxjs.catchError(() => rxjs.of({ distance: 300 }))
     )
   ),
   rxjs.shareReplay(1)
@@ -415,7 +433,7 @@ const settingPaneVisible$ = rxjs
 
       return visible;
     }, false),
-    rxjs.startsWith(false),
+    rxjs.startWith(false),
     rxjs.shareReplay(1)
   );
 
@@ -438,6 +456,11 @@ settingPaneVisible$.subscribe((visible) =>
     ? settingsPane.classList.add("visible")
     : settingsPane.classList.remove("visible")
 );
+
+settings$.subscribe(({ distance }) => {
+  Telegram.WebApp.showAlert(distance);
+  distanceSetting.value = distance;
+});
 
 user$.subscribe(function ({ isAuthorized, first_name, last_name }) {
   userInfo.innerHTML = isAuthorized

@@ -14,6 +14,7 @@ import omit from "lodash/omit.js";
 import {
   checkPointsInterval,
   ipcId,
+  watchDistance,
   ipcMessageName,
   ipcResponseTimeout,
   PointStatus,
@@ -253,6 +254,37 @@ apiServer.get(
           .send({ status: "error", message: "Failed to fetch user" });
       },
     });
+  }
+);
+
+const settingsRequestSchema = {
+  type: "object",
+  required: ["chat_id"],
+  properties: {
+    chat_id: { type: "number" },
+  },
+};
+
+apiServer.get(
+  "/api/settings",
+  { schema: { query: settingsRequestSchema } },
+  async function (request) {
+    try {
+      const settings = await db.settings
+        .findOne({
+          selector: {
+            chatId: { $eq: request.query.chat_id },
+          },
+        })
+        .exec();
+
+      const distance =
+        settings === null ? watchDistance : settings.get("distance");
+
+      return { status: "success", distance };
+    } catch (error) {
+      return { status: "error", message: "Failed to fetch settings" };
+    }
   }
 );
 
