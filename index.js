@@ -340,7 +340,7 @@ async function showAllNearbyPoints(chatId) {
     await updateListenerLocation({
       message_id: messageId,
       chat: { id: chatId },
-      location: pick(resetData, 'latitude', 'longitude'),
+      location: pick(resetData, "latitude", "longitude"),
     });
   }
 }
@@ -377,7 +377,7 @@ async function showPointDetails(pointId, chatId, messageId) {
         point.votedAt ? relativeTime.format(point.votedAt) : null,
       ],
       ["Описание", point.description],
-      ["Создана", relativeTime.format(point.createdAt)],
+      ["Создан", relativeTime.format(point.createdAt)],
       ["Автор", point.createdBy],
     ]
       .filter(([_, text]) => Boolean(text))
