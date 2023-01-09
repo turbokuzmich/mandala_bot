@@ -538,7 +538,12 @@ bot.on(
       await bot.sendMessage(
         id,
         [
-          ["Координаты", `${point.latitude}, ${point.longitude}`],
+          [
+            "Координаты",
+            `${point.latitude.toPrecision(6)}, ${point.longitude.toPrecision(
+              6
+            )}`,
+          ],
           ["Статус", PointStatusDescription[point.status]],
           [
             "Медицинская служба",
