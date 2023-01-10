@@ -103,13 +103,21 @@ class ApiChannel {
       });
       this.ipc.server.on(this.messageId, async (message) => {
         switch (message.method) {
-          case "getUserByChatId":
+          case "getUserByChatId": {
             await this.sendUser(message.chatId, message.requestId);
             break;
+          }
           case "notifyNearby": {
             await this.notifyListenersOfNewNearbyPoint(
               message.ids,
               message.point
+            );
+            break;
+          }
+          case "greetUser": {
+            await bot.sendMessage(
+              message.id,
+              `Приветствую, ${message.first_name}. Сегодня такой чудесный день!`
             );
             break;
           }

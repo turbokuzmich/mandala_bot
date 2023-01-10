@@ -13,9 +13,11 @@ import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
 import pick from "lodash/pick.js";
 import omit from "lodash/omit.js";
+import entries from "lodash/entries";
 import get from "lodash/get.js";
 import property from "lodash/property.js";
 import exitHook from "async-exit-hook";
+import { createHash, createHmac } from "crypto";
 import {
   checkPointsInterval,
   ipcId,
@@ -234,14 +236,61 @@ const apiServer = fasify();
 
 apiServer.register(fastifyIo);
 
-apiServer.get("/api/login", async function (request) {
-  await writeFile(
-    resolve(process.cwd(), "login.json"),
-    JSON.stringify(request.query, null, 2)
-  );
+const authSchema = {
+  type: "object",
+  properties: {
+    id: {
+      type: "string",
+    },
+    first_name: {
+      type: "string",
+    },
+    last_name: {
+      type: "string",
+    },
+    username: {
+      type: "string",
+    },
+    photo_url: {
+      type: "string",
+    },
+    auth_date: {
+      type: "string",
+    },
+    hash: {
+      type: "string",
+    },
+  },
+  required: ["id", "first_name", "auth_date", "hash"],
+};
 
-  return { status: "success" };
-});
+apiServer.get(
+  "/api/login",
+  { schema: { query: authSchema } },
+  async function (request, reply) {
+    const checkString = entries(omit(request.query, "hash"))
+      .map(([key, value]) => `${key}=${value}`)
+      .sort()
+      .join("\n");
+
+    const secretKey = createHash("sha256")
+      .update(process.env.TELEGRAM_API_TOKEN)
+      .digest();
+
+    const hash = createHmac("sha256", secretKey)
+      .update(checkString)
+      .digest("hex");
+
+    if (hash === request.query.hash) {
+      ipc.of[ipcId].emit(ipcMessageName, {
+        command: "greetUser",
+        ...request.query,
+      });
+    } else {
+      return reply.code(401);
+    }
+  }
+);
 
 apiServer.get("/api/map/points", async function () {
   const points = await db.points.find().exec();
