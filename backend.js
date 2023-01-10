@@ -234,6 +234,15 @@ const apiServer = fasify();
 
 apiServer.register(fastifyIo);
 
+apiServer.get("/api/login", async function (request) {
+  await writeFile(
+    resolve(process.cwd(), "login.json"),
+    JSON.stringify(request.query, null, 2)
+  );
+
+  return { status: "success" };
+});
+
 apiServer.get("/api/map/points", async function () {
   const points = await db.points.find().exec();
 

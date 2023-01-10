@@ -1,4 +1,3 @@
-// import { writeFile } from "fs/promises";
 import { v4 as uuid } from "uuid";
 import TimeAgo from "javascript-time-ago";
 import TimeAgoRuLocale from "javascript-time-ago/locale/ru";
@@ -184,6 +183,7 @@ const commands = {
       "Всякие ништяки от Димастого. Например, расчет мандалы /mandala",
   },
   settings: { description: "Пока я не придумал тут никаких настроек" },
+  auth: { description: "Тест авторизации" },
 };
 
 const botCommands = Object.entries(commands).map(
@@ -256,7 +256,7 @@ async function sendCalculationImage(chat, message, result) {
         reply_to_message_id: message,
         reply_markup: {
           remove_keyboard: true,
-        }
+        },
       },
       {
         filename: `${result.data.letters.join("")}.png`,
@@ -374,7 +374,7 @@ async function showPointDetails(pointId, chatId, messageId) {
       {
         reply_markup: {
           remove_keyboard: true,
-        }
+        },
       }
     );
   }
@@ -382,7 +382,7 @@ async function showPointDetails(pointId, chatId, messageId) {
   await bot.sendLocation(chatId, point.latitude, point.longitude, {
     reply_markup: {
       remove_keyboard: true,
-    }
+    },
   });
 
   const author = [point.createdBy.first_name, point.createdBy.last_name]
@@ -421,7 +421,7 @@ async function showPointDetails(pointId, chatId, messageId) {
       parse_mode: "Markdown",
       reply_markup: {
         remove_keyboard: true,
-      }
+      },
     }
   );
 }
@@ -462,7 +462,7 @@ async function notifyListener(
       {
         reply_markup: {
           remove_keyboard: true,
-        }
+        },
       }
     );
 
@@ -488,7 +488,7 @@ async function notifyListener(
     await bot.sendMessage(chatId, "Рядом с вами нет постов", {
       reply_markup: {
         remove_keyboard: true,
-      }
+      },
     });
 
     set(liveWatches, [messageId, "lastMessageType"], "empty");
@@ -544,7 +544,7 @@ async function sendNearbyPoints(message) {
       await bot.sendMessage(id, "Рядом с вами нет постов", {
         reply_markup: {
           remove_keyboard: true,
-        }
+        },
       });
     }
   } catch (error) {
@@ -554,7 +554,7 @@ async function sendNearbyPoints(message) {
       {
         reply_markup: {
           remove_keyboard: true,
-        }
+        },
       }
     );
   }
@@ -585,7 +585,7 @@ async function sendCalculationResult(chat, message, result) {
         reply_to_message_id: message,
         reply_markup: {
           remove_keyboard: true,
-        }
+        },
       },
       { filename: `${letters.join("")}.txt`, contentType: "text/plain" }
     );
@@ -743,11 +743,11 @@ bot.onText(commandRegExps.start, async function (message) {
       .join(
         " "
       )}.\n\nПока этот бот ничего толком не умееет, кроме как рассчитывать мандалы. Если хочешь, можешь попробовать команду /mandala.`,
-      {
-        reply_markup: {
-          remove_keyboard: true,
-        }
-      }
+    {
+      reply_markup: {
+        remove_keyboard: true,
+      },
+    }
   );
 });
 
@@ -775,6 +775,31 @@ bot.onText(commandRegExps.help, async function (message) {
   });
 });
 
+bot.onText(commandRegExps.auth, async function (message) {
+  const {
+    message_id,
+    chat: { id },
+  } = message;
+
+  await bot.sendMessage(id, "Попытка авторизации", {
+    reply_to_message_id: message_id,
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "Авторизация на сайте",
+            login_url: {
+              url: "https://m.deluxspa.ru/api/login",
+              forward_text: "Some forward text",
+              request_write_access: true,
+            },
+          },
+        ],
+      ],
+    },
+  });
+});
+
 bot.on("message", async function (message) {
   const {
     message_id,
@@ -790,17 +815,15 @@ bot.on("message", async function (message) {
     runCalculation(id, message_id, text);
     mandalaRequests.delete(id);
   } else if (web_app_data) {
-    console.log('web app data', web_app_data);
+    console.log("web app data", web_app_data);
   } else if (location) {
     await handleNearbyPointsRequest(message);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
-    await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.",
-      {
-        reply_markup: {
-          remove_keyboard: true,
-        }
-      }
-    );
+    await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.", {
+      reply_markup: {
+        remove_keyboard: true,
+      },
+    });
   }
 });
 
@@ -835,6 +858,8 @@ bot.on("callback_query", async (callback) => {
     await listAllNearbyPoints(id);
   }
 });
+
+bot.on("my_chat_member", async (member) => {});
 
 async function main() {
   apiChannel.listen();
