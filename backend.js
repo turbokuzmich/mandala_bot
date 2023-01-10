@@ -276,13 +276,37 @@ apiServer.get("/api/web_app", function (request, reply) {
   </head>
   <body>
     <script>
-      window.addEventListener("load", () => {
-        Telegram.WebApp.showAlert(JSON.stringify("asdasd"));
+      window.addEventListener("load", async () => {
+        const response = await fetch("/api/web_app", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ query_id: Telegram.WebApp.initDataUnsafe.query_id })
+        })
+        //Telegram.WebApp.showAlert(JSON.stringify("asdasd"));
       });
+      const data = await response.json();
+
+      Telegram.WebApp.showAlert(JSON.stringify(data));
     </script>
   </body>
 </html>
   `);
+});
+
+apiServer.post("/api/web_app", (request) => {
+  const { query_id } = request.body;
+
+  if (query_id) {
+    return { success: true, query_id };
+    /*ipc.of[ipcId].emit(ipcMessageName, {
+      method: "greetUser",
+      ...request.query,
+    });*/
+  } else {
+    return { success: false };
+  }
 });
 
 apiServer.get(
