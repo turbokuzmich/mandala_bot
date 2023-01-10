@@ -254,6 +254,9 @@ async function sendCalculationImage(chat, message, result) {
       {
         caption: "Расчет на картинке",
         reply_to_message_id: message,
+        reply_markup: {
+          remove_keyboard: true,
+        }
       },
       {
         filename: `${result.data.letters.join("")}.png`,
@@ -367,11 +370,20 @@ async function showPointDetails(pointId, chatId, messageId) {
   if (point === null) {
     return bot.sendMessage(
       chatId,
-      "Информация о посте не найдена. Возможно, она была удалена."
+      "Информация о посте не найдена. Возможно, она была удалена.",
+      {
+        reply_markup: {
+          remove_keyboard: true,
+        }
+      }
     );
   }
 
-  await bot.sendLocation(chatId, point.latitude, point.longitude);
+  await bot.sendLocation(chatId, point.latitude, point.longitude, {
+    reply_markup: {
+      remove_keyboard: true,
+    }
+  });
 
   const author = [point.createdBy.first_name, point.createdBy.last_name]
     .filter(Boolean)
@@ -407,6 +419,9 @@ async function showPointDetails(pointId, chatId, messageId) {
       .join("\n"),
     {
       parse_mode: "Markdown",
+      reply_markup: {
+        remove_keyboard: true,
+      }
     }
   );
 }
@@ -443,13 +458,19 @@ async function notifyListener(
   if (error && lastMessageType !== "error") {
     await bot.sendMessage(
       chatId,
-      "Не удалось получить информацию о ближайших постах"
+      "Не удалось получить информацию о ближайших постах",
+      {
+        reply_markup: {
+          remove_keyboard: true,
+        }
+      }
     );
 
     set(liveWatches, [messageId, "lastMessageType"], "error");
   } else if (nearbyPoints.length > 0) {
     await bot.sendMessage(chatId, getNearbyPointsText(nearbyPoints, true), {
       reply_markup: {
+        remove_keyboard: true,
         inline_keyboard: getNearbyPointsButtons(chatId, nearbyPoints),
       },
     });
@@ -464,7 +485,11 @@ async function notifyListener(
       ])
     );
   } else if (allNearbyPoints.length === 0 && lastMessageType !== "empty") {
-    await bot.sendMessage(chatId, "Рядом с вами нет постов");
+    await bot.sendMessage(chatId, "Рядом с вами нет постов", {
+      reply_markup: {
+        remove_keyboard: true,
+      }
+    });
 
     set(liveWatches, [messageId, "lastMessageType"], "empty");
   }
@@ -511,16 +536,26 @@ async function sendNearbyPoints(message) {
     if (nearbyPoints.length > 0) {
       await bot.sendMessage(id, getNearbyPointsText(nearbyPoints), {
         reply_markup: {
+          remove_keyboard: true,
           inline_keyboard: getNearbyPointsButtons(id, nearbyPoints, true),
         },
       });
     } else {
-      await bot.sendMessage(id, "Рядом с вами нет постов");
+      await bot.sendMessage(id, "Рядом с вами нет постов", {
+        reply_markup: {
+          remove_keyboard: true,
+        }
+      });
     }
   } catch (error) {
     await bot.sendMessage(
       id,
-      "Не удалось получить информацию о ближайших постах"
+      "Не удалось получить информацию о ближайших постах",
+      {
+        reply_markup: {
+          remove_keyboard: true,
+        }
+      }
     );
   }
 }
@@ -548,6 +583,9 @@ async function sendCalculationResult(chat, message, result) {
       {
         caption: "Расчет в текстовом виде",
         reply_to_message_id: message,
+        reply_markup: {
+          remove_keyboard: true,
+        }
       },
       { filename: `${letters.join("")}.txt`, contentType: "text/plain" }
     );
@@ -563,14 +601,23 @@ function getCalculationSuccessCallback({ chat, message: message_id }) {
       sendCalculationImage(chat, message_id, result);
     } else if (status === CalculationStatus.Validation) {
       bot.sendMessage(chat, `Текст не прошел проверку\n\n${message}`, {
+        reply_markup: {
+          remove_keyboard: true,
+        },
         reply_to_message_id: message_id,
       });
     } else if (status === CalculationStatus.Fail) {
       bot.sendMessage(chat, message, {
+        reply_markup: {
+          remove_keyboard: true,
+        },
         reply_to_message_id: message_id,
       });
     } else {
       bot.sendMessage(chat, "Возникла неизвестная ошибка", {
+        reply_markup: {
+          remove_keyboard: true,
+        },
         reply_to_message_id: message_id,
       });
     }
@@ -596,6 +643,9 @@ function getCalculationFailCallback({ chat, message }) {
       chat,
       "Возникла ошибка при расчете. Пожалуйста, повторите позже.",
       {
+        reply_markup: {
+          remove_keyboard: true,
+        },
         reply_to_message_id: message,
       }
     );
@@ -628,6 +678,9 @@ bot.onText(commandRegExps.mandala, async function (message) {
       id,
       "Извините, слишком много расчетов. Пожалуйста, попробуйте позже.",
       {
+        reply_markup: {
+          remove_keyboard: true,
+        },
         reply_to_message_id: message_id,
       }
     );
@@ -636,6 +689,9 @@ bot.onText(commandRegExps.mandala, async function (message) {
   mandalaRequests.add(id);
 
   await bot.sendMessage(id, "Пожалуйста, отправьте текст для расчета", {
+    reply_markup: {
+      remove_keyboard: true,
+    },
     reply_to_message_id: message_id,
   });
 });
@@ -655,6 +711,8 @@ bot.onText(commandRegExps.map, async function (message) {
     {
       reply_markup: {
         one_time_keyboard: true,
+        resize_keyboard: true,
+        remove_keyboard: true,
         keyboard: [
           [
             {
@@ -684,7 +742,12 @@ bot.onText(commandRegExps.start, async function (message) {
       .filter(Boolean)
       .join(
         " "
-      )}.\n\nПока этот бот ничего толком не умееет, кроме как рассчитывать мандалы. Если хочешь, можешь попробовать команду /mandala.`
+      )}.\n\nПока этот бот ничего толком не умееет, кроме как рассчитывать мандалы. Если хочешь, можешь попробовать команду /mandala.`,
+      {
+        reply_markup: {
+          remove_keyboard: true,
+        }
+      }
   );
 });
 
@@ -705,6 +768,9 @@ bot.onText(commandRegExps.help, async function (message) {
   );
 
   await bot.sendMessage(id, answerLines.join("\n"), {
+    reply_markup: {
+      remove_keyboard: true,
+    },
     reply_to_message_id: message_id,
   });
 });
@@ -720,19 +786,21 @@ bot.on("message", async function (message) {
   // 177074269
   // console.log(message);
 
-  const chat = await bot.getChat(177074269);
-  console.log(chat);
-  console.log(id);
-
   if (mandalaRequests.has(id)) {
     runCalculation(id, message_id, text);
     mandalaRequests.delete(id);
   } else if (web_app_data) {
-    console.log(web_app_data);
+    console.log('web app data', web_app_data);
   } else if (location) {
     await handleNearbyPointsRequest(message);
   } else if (!commandsRegExpsList.some((command) => command.test(text))) {
-    await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.");
+    await bot.sendMessage(id, "Пожалуйста, воспользуйтесь одной из команд.",
+      {
+        reply_markup: {
+          remove_keyboard: true,
+        }
+      }
+    );
   }
 });
 
