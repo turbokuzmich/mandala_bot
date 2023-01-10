@@ -121,7 +121,7 @@ class ApiChannel {
               {
                 reply_markup: {
                   remove_keyboard: true,
-                }
+                },
               }
             );
             break;
@@ -282,14 +282,6 @@ async function sendCalculationImage(chat, message, result) {
 }
 
 const liveWatches = {};
-
-function getLiveWatchDataByChatId(chatId) {
-  const messageId = Object.keys(liveWatches).find(
-    (messageId) => liveWatches[messageId].chat === chatId
-  );
-
-  return messageId ? liveWatches[messageId] : null;
-}
 
 function getNearbyPointsText(nearbyPoints, asNewPoints = false) {
   const appeared = plural(
@@ -723,21 +715,28 @@ bot.onText(commandRegExps.map, async function (message) {
     "На карте можно посмотреть посты ДПС, добавить новые или подтвердить текущие. Включив оповещения вы будете уведомлены о приближении к постам.",
     {
       reply_markup: {
-        one_time_keyboard: true,
-        resize_keyboard: true,
-        remove_keyboard: true,
-        keyboard: [
+        inline_keyboard: [
           [
             {
               text: "Карта",
-              web_app: { url: `https://m.deluxspa.ru/web_app?chat_id=${id}` },
-            },
-            {
-              text: "Оповещения",
-              request_location: true,
+              web_app: {
+                url: "https://m.deluxspa.ru/api/web_app",
+              },
             },
           ],
         ],
+        // keyboard: [
+        //   [
+        //     {
+        //       text: "Карта",
+        //       web_app: { url: `https://m.deluxspa.ru/web_app?chat_id=${id}` },
+        //     },
+        //     {
+        //       text: "Оповещения",
+        //       request_location: true,
+        //     },
+        //   ],
+        // ],
       },
     }
   );

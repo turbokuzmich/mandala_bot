@@ -264,6 +264,10 @@ const authSchema = {
   required: ["id", "first_name", "auth_date", "hash"],
 };
 
+apiServer.get("/api/web_app", function (request, reply) {
+  reply.code(200), send(request.query);
+});
+
 apiServer.get(
   "/api/login",
   { schema: { query: authSchema } },
