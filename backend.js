@@ -13,7 +13,7 @@ import fasify from "fastify";
 import fastifyIo from "fastify-socket.io";
 import pick from "lodash/pick.js";
 import omit from "lodash/omit.js";
-import entries from "lodash/entries";
+import entries from "lodash/entries.js";
 import get from "lodash/get.js";
 import property from "lodash/property.js";
 import exitHook from "async-exit-hook";
@@ -283,9 +283,10 @@ apiServer.get(
 
     if (hash === request.query.hash) {
       ipc.of[ipcId].emit(ipcMessageName, {
-        command: "greetUser",
+        method: "greetUser",
         ...request.query,
       });
+      return reply.code(200).send({ hello: request.query.first_name });
     } else {
       return reply.code(401);
     }

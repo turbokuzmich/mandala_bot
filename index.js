@@ -117,7 +117,12 @@ class ApiChannel {
           case "greetUser": {
             await bot.sendMessage(
               message.id,
-              `Приветствую, ${message.first_name}. Сегодня такой чудесный день!`
+              `Приветствую, ${message.first_name}. Сегодня такой чудесный день!`,
+              {
+                reply_markup: {
+                  remove_keyboard: true,
+                }
+              }
             );
             break;
           }
